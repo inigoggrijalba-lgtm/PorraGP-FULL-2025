@@ -1,0 +1,40 @@
+# Workflow para compilar y desplegar la aplicación Vite en GitHub Pages
+name: Deploy PorraGP to GitHub Pages
+
+on:
+  # Se ejecuta en pushes a la rama principal
+  push:
+    branches: ["main"]
+
+  # Permite ejecutar este flujo manualmente desde la pestaña Actions
+  workflow_dispatch:
+
+# Permisos para poder escribir en la rama gh-pages del repositorio
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Build project
+        # La variable API_KEY se pasa desde los Secretos del repositorio de GitHub
+        run: npm run build
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          # El token es necesario para poder escribir en el repositorio
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # El directorio que contiene los archivos compilados para desplegar
+          publish_dir: ./dist

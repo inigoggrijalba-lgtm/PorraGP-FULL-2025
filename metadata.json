@@ -1,0 +1,5 @@
+{
+  "name": "PorraGP Full 2025",
+  "description": "Una aplicación conectada para gestionar y visualizar estadísticas de la porra de MotoGP a partir de datos de Google Sheets.",
+  "requestFramePermissions": []
+}
