@@ -170,7 +170,32 @@ const parseMotoGpData = (csvText: string): MotoGpData => {
     return { races, standings, playerVotes, driverVoteCounts, motogpResults, allDrivers };
 };
 
-type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming';
+type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'statistics';
+
+const TABS: { name: string; tab: Tab }[] = [
+    { name: "Inicio", tab: "dashboard" },
+    { name: "Clasificación", tab: "standings" },
+    { name: "Votar", tab: "votar" },
+    { name: "Circuitos", tab: "circuits" },
+    { name: "Participantes", tab: "participantes" },
+    { name: "Resultados MotoGP", tab: "motogp_results" },
+    { name: "Estadísticas", tab: "statistics" },
+];
+
+// Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
+const RefreshButton: React.FC<{ onClick: () => void; isLoading: boolean }> = ({ onClick, isLoading }) => {
+    return (
+        <button
+            onClick={onClick}
+            disabled={isLoading}
+            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center disabled:bg-gray-500 disabled:cursor-not-allowed"
+            aria-label={isLoading ? "Cargando datos" : "Actualizar datos"}
+        >
+            <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''} mr-2`} />
+            <span className="hidden sm:inline">{isLoading ? '...' : 'Actualizar'}</span>
+        </button>
+    );
+};
 
 const App: React.FC = () => {
     const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
@@ -242,6 +267,8 @@ const App: React.FC = () => {
                 return <VotarTab />;
             case 'livetiming':
                 return <LiveTimingTab />;
+            case 'statistics':
+                return <StatisticsTab data={motoGpData} />;
             default:
                 return null;
         }
@@ -250,36 +277,60 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen w-full p-4 sm:p-8 flex flex-col">
             <header className="w-full max-w-7xl mx-auto flex justify-between items-center mb-8">
-                <h1 className="text-2xl sm:text-4xl font-bold font-orbitron text-white">
-                    Porra<span className="motogp-red">GP</span>
-                </h1>
-                <button
-                    onClick={() => fetchData()}
-                    disabled={isLoading}
-                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center disabled:bg-gray-500 disabled:cursor-not-allowed"
+                <button 
+                    onClick={() => handleSetTab('dashboard')} 
+                    className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
                 >
-                    <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''} mr-2`} />
-                    <span className="hidden sm:inline">{isLoading ? '...' : 'Actualizar'}</span>
+                    <span className="transition-colors duration-300 group-hover:motogp-red">Porra</span>
+                    <span className="motogp-red transition-colors duration-300 group-hover:text-white">GP</span>
                 </button>
+                <RefreshButton onClick={fetchData} isLoading={isLoading} />
             </header>
 
             <div className="w-full max-w-7xl mx-auto">
                 <div className="mb-8 border-b border-gray-700 flex justify-between items-center">
-                    {/* Mobile Menu Button */}
-                    <div className="sm:hidden">
-                        <button onClick={() => setIsMenuOpen(true)} className="p-2 text-gray-400 hover:text-white">
+                    {/* Mobile Menu Button & Dropdown */}
+                    <div className="sm:hidden relative">
+                        <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
                              <MenuIcon className="w-6 h-6" />
                         </button>
+                        {isMenuOpen && (
+                            <>
+                                {/* Backdrop to close menu on click outside */}
+                                <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                                <div
+                                    className="absolute left-0 mt-2 w-56 origin-top-left rounded-md shadow-lg card-bg ring-1 ring-black ring-opacity-5 z-50"
+                                >
+                                    <div className="py-1" role="menu" aria-orientation="vertical">
+                                        {TABS.map(({name, tab}) => (
+                                            <button
+                                                key={tab}
+                                                onClick={() => handleSetTab(tab)}
+                                                className={`${
+                                                    activeTab === tab ? 'motogp-red bg-gray-900/50' : 'text-gray-300'
+                                                } block w-full text-left px-4 py-4 text-lg hover:bg-gray-700/80 transition-colors`}
+                                                role="menuitem"
+                                            >
+                                                {name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {/* Desktop Tabs */}
                     <nav className="hidden sm:flex -mb-px space-x-6 overflow-x-auto" aria-label="Tabs">
-                        <TabButton name="Inicio" tab="dashboard" activeTab={activeTab} setActiveTab={handleSetTab} />
-                        <TabButton name="Clasificación" tab="standings" activeTab={activeTab} setActiveTab={handleSetTab} />
-                        <TabButton name="Votar" tab="votar" activeTab={activeTab} setActiveTab={handleSetTab} />
-                        <TabButton name="Circuitos" tab="circuits" activeTab={activeTab} setActiveTab={handleSetTab} />
-                        <TabButton name="Participantes" tab="participantes" activeTab={activeTab} setActiveTab={handleSetTab} />
-                        <TabButton name="Resultados MotoGP" tab="motogp_results" activeTab={activeTab} setActiveTab={handleSetTab} />
+                         {TABS.map(({ name, tab }) => (
+                            <TabButton
+                                key={tab}
+                                name={name}
+                                tab={tab}
+                                activeTab={activeTab}
+                                setActiveTab={handleSetTab}
+                            />
+                        ))}
                     </nav>
                      <button
                         onClick={() => setActiveTab('livetiming')}
@@ -291,23 +342,6 @@ const App: React.FC = () => {
                 {renderContent()}
             </div>
             
-            {/* Mobile Menu Overlay */}
-            {isMenuOpen && (
-                <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center sm:hidden">
-                    <button onClick={() => setIsMenuOpen(false)} className="absolute top-5 right-5 p-2 text-gray-400 hover:text-white">
-                        <XIcon className="w-8 h-8" />
-                    </button>
-                    <nav className="flex flex-col space-y-4 text-center">
-                        <TabButton name="Inicio" tab="dashboard" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                        <TabButton name="Clasificación" tab="standings" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                        <TabButton name="Votar" tab="votar" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                        <TabButton name="Circuitos" tab="circuits" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                        <TabButton name="Participantes" tab="participantes" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                        <TabButton name="Resultados MotoGP" tab="motogp_results" activeTab={activeTab} setActiveTab={handleSetTab} isMobile />
-                    </nav>
-                </div>
-            )}
-
              <ChatBubbleButton onClick={() => setIsChatOpen(true)} />
             {isChatOpen && motoGpData && (
                 <ChatWindow
@@ -320,20 +354,7 @@ const App: React.FC = () => {
     );
 };
 
-const TabButton: React.FC<{name: string, tab: Tab, activeTab: Tab, setActiveTab: (tab: Tab) => void, isMobile?: boolean}> = ({ name, tab, activeTab, setActiveTab, isMobile = false}) => {
-    if (isMobile) {
-        return (
-             <button
-                onClick={() => setActiveTab(tab)}
-                className={`${
-                    activeTab === tab ? 'motogp-red' : 'text-gray-400'
-                } text-2xl font-orbitron transition-colors`}
-            >
-                {name}
-            </button>
-        )
-    }
-    
+const TabButton: React.FC<{name: string, tab: Tab, activeTab: Tab, setActiveTab: (tab: Tab) => void}> = ({ name, tab, activeTab, setActiveTab}) => {
     return (
         <button
             onClick={() => setActiveTab(tab)}
@@ -389,30 +410,30 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
     return (
         <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Líder del Campeonato" value={leader.player} metric={`${leader.totalPoints} Pts`} icon={<TrophyIcon className="w-8 h-8"/>} />
+                <StatCard title="Líder del Campeonato" value={leader.player} metric={`${leader.totalPoints} Pts`} icon={<TrophyIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
                 <StatCard 
                     title="Próxima Carrera" 
                     value={nextRaceInfo.seasonOver ? 'TEMPORADA FINALIZADA' : (nextRaceInfo.race?.circuit ?? 'N/A')} 
                     metric={nextRaceInfo.seasonOver ? 'Gracias por participar' : (nextRaceInfo.race ? `${nextRaceInfo.race.date} - ${nextRaceInfo.race.time}` : 'TBC')} 
-                    icon={<FlagIcon className="w-8 h-8"/>} 
+                    icon={<FlagIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} 
                 />
-                <StatCard title="Piloto más Votado (Global)" value={mostVotedDriver.driver} metric={`${mostVotedDriver.totalVotes} Votos`} icon={<SparklesIcon className="w-8 h-8"/>} />
+                <StatCard title="Piloto más Votado (Global)" value={mostVotedDriver.driver} metric={`${mostVotedDriver.totalVotes} Votos`} icon={<SparklesIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
                 <button
                     onClick={() => setActiveTab('votar')}
-                    className="card-bg p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-green-500 hover:bg-gray-800/60 hover:shadow-green-900/50 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
+                    className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-green-500 hover:bg-gray-800/60 hover:shadow-green-900/50 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
                 >
-                    <div className="p-3 bg-gray-700/50 rounded-lg text-green-500">
-                        <PencilSquareIcon className="w-8 h-8"/>
+                    <div className="p-2 sm:p-3 bg-gray-700/50 rounded-lg text-green-500">
+                        <PencilSquareIcon className="w-6 h-6 sm:w-8 sm:h-8"/>
                     </div>
                     <div>
                         <p className="text-sm text-gray-400">¿Listo para votar?</p>
-                        <p className="text-2xl font-bold text-white font-orbitron">¡A VOTAR!</p>
-                        <p className="text-sm text-green-500">Ir al formulario</p>
+                        <p className="text-xl sm:text-2xl font-bold text-white font-orbitron">¡A VOTAR!</p>
+                        <p className="text-xs sm:text-sm text-green-500">Ir al formulario</p>
                     </div>
                 </button>
             </div>
 
-            <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg mb-8">
                 <h2 className="font-orbitron text-2xl mb-4 text-white">Votos para la Próxima Carrera: <span className="motogp-red">{nextRaceInfo.race?.circuit ?? 'N/A'}</span></h2>
                 {votesForNextRace.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -428,6 +449,24 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
                 ) : (
                      <p className="text-gray-400 text-center py-4">{nextRaceInfo.seasonOver ? 'La temporada ha finalizado.' : 'No hay información de votos para la próxima carrera.'}</p>
                 )}
+            </div>
+            
+             <div className="mt-8">
+                <a 
+                    href="https://docs.google.com/spreadsheets/d/1YGSNZagJv0UjxcUhCvIl1BWCJ1v9i91MYBjd1O8S3bM/edit?gid=0#gid=0"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="card-bg p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-green-500 hover:bg-gray-800/60 hover:shadow-green-900/50 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
+                >
+                    <div className="p-3 bg-gray-700/50 rounded-lg text-green-500">
+                        <TableIcon className="w-8 h-8"/>
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-400">Consulta los datos brutos</p>
+                        <p className="text-2xl font-bold text-white font-orbitron">Acceso a la base de datos</p>
+                        <p className="text-sm text-green-500">Abrir Google Sheets</p>
+                    </div>
+                </a>
             </div>
 
             {selectedPlayer && (
@@ -708,8 +747,201 @@ const LiveTimingTab: React.FC = () => {
     );
 };
 
+const PLAYER_CHART_COLORS = ['#3498db', '#e74c3c', '#9b59b6', '#2ecc71', '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#d35400', '#c0392b', '#8e44ad', '#27ae60'];
+
+const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+    const [selectedPlayers, setSelectedPlayers] = useState<string[]>(() => 
+        data.standings.slice(0, 4).map(p => p.player)
+    );
+
+    const handlePlayerToggle = (player: string) => {
+        setSelectedPlayers(prev => 
+            prev.includes(player) 
+                ? prev.filter(p => p !== player)
+                : [...prev, player]
+        );
+    };
+
+    const chartData = useMemo(() => {
+        const raceLabels = data.races.map(r => r.circuit.substring(0, 3).toUpperCase());
+        const playerColorMap = new Map(data.standings.map((p, i) => [p.player, PLAYER_CHART_COLORS[i % PLAYER_CHART_COLORS.length]]));
+
+        const series = data.standings
+            .filter(playerData => selectedPlayers.includes(playerData.player))
+            .map(playerData => {
+                let cumulativePoints = 0;
+                const points = playerData.pointsPerRace.map((p, index) => {
+                    cumulativePoints += p;
+                    return { 
+                        x: raceLabels[index], 
+                        y: cumulativePoints, 
+                        vote: data.playerVotes.find(v => v.player === playerData.player)?.votesPerRace[index] || 'N/A' 
+                    };
+                });
+                return {
+                    name: playerData.player,
+                    color: playerColorMap.get(playerData.player) || '#ffffff',
+                    data: points,
+                };
+            });
+        
+        return {
+            labels: raceLabels,
+            series: series,
+        };
+    }, [data, selectedPlayers]);
+
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
+            <h2 className="font-orbitron text-2xl mb-4 text-white">Evolución de Puntos</h2>
+            <div className="mb-6">
+                <p className="text-sm text-gray-400 mb-2">Selecciona los jugadores a comparar:</p>
+                <div className="flex flex-wrap gap-2">
+                    {data.standings.map(player => (
+                        <button
+                            key={player.player}
+                            onClick={() => handlePlayerToggle(player.player)}
+                            className={`px-3 py-1 text-sm rounded-full transition-colors border ${
+                                selectedPlayers.includes(player.player)
+                                    ? 'bg-red-500 border-red-500 text-white'
+                                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                            }`}
+                        >
+                            {player.player}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            
+            <div className="h-[500px] w-full">
+                <EvolutionChart data={chartData} />
+            </div>
+        </div>
+    );
+};
+
 
 // --- Sub-components ---
+
+type ChartData = {
+    labels: string[];
+    series: {
+        name: string;
+        color: string;
+        data: { x: string; y: number, vote: string }[];
+    }[];
+};
+
+const EvolutionChart: React.FC<{ data: ChartData }> = ({ data }) => {
+    const svgRef = useRef<SVGSVGElement>(null);
+    // FIX: Replaced JSX.Element with React.ReactNode to resolve "Cannot find namespace 'JSX'" error.
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; content: React.ReactNode } | null>(null);
+
+    const MARGIN = { top: 20, right: 40, bottom: 40, left: 50 };
+    const WIDTH = 800; // Viewbox width
+    const HEIGHT = 500; // Viewbox height
+
+    const maxY = Math.max(...data.series.flatMap(s => s.data.map(d => d.y)), 0);
+    
+    const xScale = (index: number) => MARGIN.left + index * (WIDTH - MARGIN.left - MARGIN.right) / (data.labels.length - 1);
+    const yScale = (y: number) => HEIGHT - MARGIN.bottom - (y / (maxY === 0 ? 1 : maxY)) * (HEIGHT - MARGIN.top - MARGIN.bottom);
+
+    const handleMouseOver = (e: React.MouseEvent, point: { y: number, vote: string }, series: { name: string; color: string; }, index: number) => {
+        const svgRect = svgRef.current?.getBoundingClientRect();
+        if (!svgRect) return;
+
+        const content = (
+            <>
+                <div className="flex items-center mb-1">
+                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: series.color }}></div>
+                    <span className="font-bold text-white">{series.name}</span>
+                </div>
+                <p className="text-sm">Puntos: <span className="font-bold">{point.y}</span></p>
+                <p className="text-sm">Voto: <span className="font-bold">{point.vote}</span></p>
+            </>
+        );
+        
+        // Position tooltip relative to the page, not the SVG
+        const xPos = e.clientX - svgRect.left > svgRect.width / 2 ? e.clientX - 150 : e.clientX + 20;
+        const yPos = e.clientY - 20;
+
+        setTooltip({
+            x: e.clientX,
+            y: e.clientY,
+            content: content
+        });
+    };
+    
+    const handleMouseOut = () => {
+        setTooltip(null);
+    };
+
+    return (
+        <div className="relative w-full h-full">
+            <svg ref={svgRef} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-full">
+                {/* Y-axis grid lines and labels */}
+                {[...Array(6)].map((_, i) => {
+                    const y = MARGIN.top + i * (HEIGHT - MARGIN.top - MARGIN.bottom) / 5;
+                    const value = Math.round(maxY * (1 - i / 5));
+                    return (
+                        <g key={i}>
+                            <line x1={MARGIN.left} y1={y} x2={WIDTH - MARGIN.right} y2={y} stroke="#4A5568" strokeDasharray="2,2" />
+                            <text x={MARGIN.left - 8} y={y + 4} fill="#A0AEC0" textAnchor="end" fontSize="10">{value}</text>
+                        </g>
+                    );
+                })}
+
+                {/* X-axis labels */}
+                {data.labels.map((label, i) => (
+                    <text key={label} x={xScale(i)} y={HEIGHT - MARGIN.bottom + 15} fill="#A0AEC0" textAnchor="middle" fontSize="10">{label}</text>
+                ))}
+
+                {/* Lines */}
+                {data.series.map(series => (
+                    <path
+                        key={series.name}
+                        d={`M ${series.data.map((point, i) => `${xScale(i)},${yScale(point.y)}`).join(' L ')}`}
+                        fill="none"
+                        stroke={series.color}
+                        strokeWidth="2"
+                    />
+                ))}
+
+                {/* Data points */}
+                {data.series.map(series => (
+                    <g key={`${series.name}-points`}>
+                        {series.data.map((point, i) => (
+                            <circle
+                                key={`${series.name}-${i}`}
+                                cx={xScale(i)}
+                                cy={yScale(point.y)}
+                                r="4"
+                                fill={series.color}
+                                stroke="#121212"
+                                strokeWidth="2"
+                                onMouseOver={(e) => handleMouseOver(e, point, series, i)}
+                                onMouseOut={handleMouseOut}
+                                className="cursor-pointer"
+                            />
+                        ))}
+                    </g>
+                ))}
+            </svg>
+             {tooltip && (
+                <div
+                    className="absolute card-bg p-2 rounded-md shadow-lg text-xs text-gray-300 pointer-events-none"
+                    style={{ 
+                        transform: `translate(${tooltip.x}px, ${tooltip.y}px) translate(-50%, -120%)`
+                     }}
+                >
+                    {tooltip.content}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const VotesChart: React.FC<{ data: { driver: string; count: number }[] }> = ({ data }) => {
     const maxScaleValue = useMemo(() => {
         if (data.length === 0) return 4;
@@ -871,14 +1103,14 @@ const ResultsTable: React.FC<{ results?: RaceResult[] }> = ({ results }) => {
 }
 
 const StatCard: React.FC<{title: string; value: string; metric: string; icon: React.ReactNode;}> = ({ title, value, metric, icon }) => (
-    <div className="card-bg p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600">
-        <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+    <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600">
+        <div className="p-2 sm:p-3 bg-gray-700/50 rounded-lg text-red-500">
             {icon}
         </div>
         <div>
             <p className="text-sm text-gray-400">{title}</p>
-            <p className="text-2xl font-bold text-white font-orbitron">{value}</p>
-            <p className="text-sm motogp-red">{metric}</p>
+            <p className="text-xl sm:text-2xl font-bold text-white font-orbitron">{value}</p>
+            <p className="text-xs sm:text-sm motogp-red">{metric}</p>
         </div>
     </div>
 );
