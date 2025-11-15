@@ -1,7 +1,9 @@
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, ClockIcon, MenuIcon, XIcon } from './components/icons';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article } from './types';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, ClockIcon, MenuIcon, XIcon, NewspaperIcon } from './components/icons';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQAqF8HCmEs0iGvEO0jItWZl_PfIF2Igy8PoNhEnQjB-C92vCyWvSMRB00FpsNseEA8T-7Ip4GfDPf3/pub?gid=0&single=true&output=csv';
 
@@ -170,7 +172,7 @@ const parseMotoGpData = (csvText: string): MotoGpData => {
     return { races, standings, playerVotes, driverVoteCounts, motogpResults, allDrivers };
 };
 
-type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'statistics';
+type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'statistics' | 'noticias';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
@@ -180,6 +182,7 @@ const TABS: { name: string; tab: Tab }[] = [
     { name: "Participantes", tab: "participantes" },
     { name: "Resultados MotoGP", tab: "motogp_results" },
     { name: "Estadísticas", tab: "statistics" },
+    { name: "Noticias", tab: "noticias" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -269,6 +272,8 @@ const App: React.FC = () => {
                 return <LiveTimingTab />;
             case 'statistics':
                 return <StatisticsTab data={motoGpData} />;
+            case 'noticias':
+                return <NewsTab />;
             default:
                 return null;
         }
@@ -482,28 +487,44 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
 
 
 const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+    const leaderPoints = data.standings[0]?.totalPoints ?? 0;
+
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <h2 className="font-orbitron text-2xl mb-4 text-white">Clasificación General</h2>
             <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-300 min-w-[800px]">
+                <table className="w-full text-sm text-left text-gray-300 min-w-[950px]">
                     <thead className="text-xs text-red-400 uppercase bg-gray-900/50">
                         <tr>
                             <th scope="col" className="px-3 py-3 w-12 text-center">Pos</th>
                             <th scope="col" className="px-6 py-3">Jugador</th>
                             <th scope="col" className="px-6 py-3">Puntos</th>
+                            <th scope="col" className="px-4 py-3 text-center">dif. 1º</th>
+                            <th scope="col" className="px-4 py-3 text-center">dif. sig.</th>
                             {data.races.map(race => <th key={race.circuit} scope="col" className="px-3 py-3 text-center">{race.circuit.substring(0, 3).toUpperCase()}</th>)}
                         </tr>
                     </thead>
                     <tbody>
-                        {data.standings.map((player, index) => (
-                            <tr key={player.player} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                <td className="px-3 py-4 w-12 text-center font-bold">{index + 1}</td>
-                                <td className="px-6 py-4 font-bold text-white">{player.player}</td>
-                                <td className="px-6 py-4 motogp-red font-orbitron">{player.totalPoints}</td>
-                                {player.pointsPerRace.map((points, i) => <td key={i} className="px-3 py-4 text-center text-gray-400">{points > 0 ? points : '-'}</td>)}
-                            </tr>
-                        ))}
+                        {data.standings.map((player, index) => {
+                            const diffWithFirst = leaderPoints - player.totalPoints;
+                            const previousPlayerPoints = data.standings[index - 1]?.totalPoints ?? player.totalPoints;
+                            const diffWithPrevious = index > 0 ? previousPlayerPoints - player.totalPoints : 0;
+
+                            return (
+                                <tr key={player.player} className="border-b border-gray-700 hover:bg-gray-800/50">
+                                    <td className="px-3 py-4 w-12 text-center font-bold">{index + 1}</td>
+                                    <td className="px-6 py-4 font-bold text-white font-orbitron">{player.player}</td>
+                                    <td className="px-6 py-4 motogp-red font-orbitron">{player.totalPoints}</td>
+                                    <td className="px-4 py-4 text-center font-orbitron text-gray-400">
+                                        {index === 0 ? '-' : `-${diffWithFirst}`}
+                                    </td>
+                                    <td className="px-4 py-4 text-center font-orbitron text-gray-400">
+                                        {index === 0 ? '-' : `-${diffWithPrevious}`}
+                                    </td>
+                                    {player.pointsPerRace.map((points, i) => <td key={i} className="px-3 py-4 text-center text-gray-400">{points > 0 ? points : '-'}</td>)}
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -749,6 +770,15 @@ const LiveTimingTab: React.FC = () => {
 
 const PLAYER_CHART_COLORS = ['#3498db', '#e74c3c', '#9b59b6', '#2ecc71', '#f1c40f', '#e67e22', '#1abc9c', '#34495e', '#d35400', '#c0392b', '#8e44ad', '#27ae60'];
 
+const StatSummaryCard: React.FC<{ title: string; text: string }> = ({ title, text }) => {
+    return (
+        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+            <h3 className="font-orbitron text-md motogp-red mb-2">{title}</h3>
+            <p className="text-gray-300 text-sm">{text}</p>
+        </div>
+    );
+};
+
 const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     const [selectedPlayers, setSelectedPlayers] = useState<string[]>(() => 
         data.standings.slice(0, 4).map(p => p.player)
@@ -791,6 +821,60 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
         };
     }, [data, selectedPlayers]);
 
+    const bestScoreStat = useMemo(() => {
+        if (selectedPlayers.length === 0) return null;
+        let bestPlayer = '';
+        let maxPoints = -1;
+        data.standings
+            .filter(p => selectedPlayers.includes(p.player))
+            .forEach(p => {
+                const playerMax = Math.max(...p.pointsPerRace, 0);
+                if (playerMax > maxPoints) {
+                    maxPoints = playerMax;
+                    bestPlayer = p.player;
+                }
+            });
+        if (maxPoints <= 0) return { title: "Mejor Puntuación", text: "Ningún jugador seleccionado ha puntuado todavía." };
+        return { title: "Mejor Puntuación", text: `${bestPlayer} tiene la mejor puntuación en una carrera con ${maxPoints} puntos.` };
+    }, [selectedPlayers, data.standings]);
+
+    const averagePointsStat = useMemo(() => {
+        if (selectedPlayers.length === 0) return null;
+        
+        // Una carrera se considera "completada" si al menos un jugador tiene puntuación.
+        // Esto da un recuento preciso de cuántas carreras han ocurrido realmente.
+        const completedRaceCount = data.races.reduce((count, _, raceIndex) => {
+            const hasScore = data.standings.some(player => (player.pointsPerRace[raceIndex] || 0) > 0);
+            return hasScore ? count + 1 : count;
+        }, 0);
+
+        if (completedRaceCount === 0) {
+            return { title: "Media de Puntos", text: "Aún no se han disputado carreras." };
+        }
+        
+        const playersWithAverages = data.standings
+            .filter(p => selectedPlayers.includes(p.player))
+            .map(p => {
+                // Usamos el mismo `completedRaceCount` para todos para una comparación justa.
+                const average = p.totalPoints / completedRaceCount;
+                return { player: p.player, average };
+            });
+        
+        if (playersWithAverages.length === 0) return null;
+
+        const best = playersWithAverages.reduce((max, current) => current.average > max.average ? current : max);
+
+        if (best.average <= 0 && selectedPlayers.length > 1) {
+             return { title: "Media de Puntos", text: "Ninguno de los jugadores seleccionados ha puntuado todavía." };
+        }
+
+        const text = selectedPlayers.length > 1
+            ? `${best.player} lidera la media con ${best.average.toFixed(2)} puntos por carrera.`
+            : `${best.player} tiene una media de ${best.average.toFixed(2)} puntos por carrera.`;
+
+        return { title: "Media de Puntos", text };
+    }, [selectedPlayers, data.standings, data.races]);
+
 
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
@@ -813,6 +897,11 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                     ))}
                 </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {bestScoreStat && <StatSummaryCard title={bestScoreStat.title} text={bestScoreStat.text} />}
+                {averagePointsStat && <StatSummaryCard title={averagePointsStat.title} text={averagePointsStat.text} />}
+            </div>
             
             <div className="h-[500px] w-full">
                 <EvolutionChart data={chartData} />
@@ -821,6 +910,103 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     );
 };
 
+const NewsTab: React.FC = () => {
+    const [articles, setArticles] = useState<Article[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const RSS_URL = 'https://es.motorsport.com/rss/motogp/news/';
+    // Usamos un proxy CORS diferente y más fiable para evitar errores de fetch.
+    const PROXY_URL = 'https://corsproxy.io/?';
+
+    useEffect(() => {
+        const fetchNews = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                // La URL del feed debe estar codificada para que el proxy la maneje correctamente.
+                const response = await fetch(`${PROXY_URL}${encodeURIComponent(RSS_URL)}`);
+                if (!response.ok) {
+                    throw new Error(`Error al obtener el feed de noticias (código ${response.status})`);
+                }
+                const text = await response.text();
+                
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, 'application/xml');
+                const errorNode = xml.querySelector('parsererror');
+                if (errorNode) {
+                    throw new Error('Error al analizar el feed RSS.');
+                }
+
+                const items = Array.from(xml.querySelectorAll('item')).slice(0, 6);
+                
+                const parsedArticles: Article[] = items.map(item => {
+                    const title = item.querySelector('title')?.textContent?.trim() || 'Sin título';
+                    const link = item.querySelector('link')?.textContent || '#';
+                    let description = item.querySelector('description')?.textContent?.trim() || '';
+                    
+                    description = description.split('<a class=\'more\'')[0].trim();
+                    description = description.replace(/<br\s*\/?>/gi, ' ').replace(/Recuerda:/gi, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+
+                    const imageUrl = item.querySelector('enclosure')?.getAttribute('url') || '';
+                    const pubDateStr = item.querySelector('pubDate')?.textContent || '';
+                    const pubDate = pubDateStr ? new Date(pubDateStr).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+
+                    return { title, link, description, imageUrl, pubDate };
+                });
+                setArticles(parsedArticles);
+
+            } catch (err: any) {
+                setError(err.message || 'Ocurrió un error al cargar las noticias.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchNews();
+    }, []);
+
+    if (isLoading) {
+        return (
+            <div className="text-center">
+                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-lg text-gray-300">Cargando noticias...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return <p className="text-center text-red-400">{error}</p>;
+    }
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="flex items-center mb-6">
+                <NewspaperIcon className="w-8 h-8 motogp-red mr-3"/>
+                <h2 className="font-orbitron text-3xl text-white">Últimas Noticias</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {articles.map((article, index) => (
+                    <a 
+                        key={index} 
+                        href={article.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-2 transition-transform duration-300 flex flex-col"
+                    >
+                        <div className="w-full h-48 overflow-hidden">
+                             <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                        </div>
+                        <div className="p-4 flex flex-col flex-grow">
+                            <p className="text-xs text-gray-400 mb-2">{article.pubDate}</p>
+                            <h3 className="font-bold text-md text-white group-hover:motogp-red transition-colors flex-grow">{article.title}</h3>
+                            <p className="text-sm text-gray-300 mt-2 line-clamp-3">{article.description}</p>
+                        </div>
+                    </a>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 // --- Sub-components ---
 
@@ -835,7 +1021,6 @@ type ChartData = {
 
 const EvolutionChart: React.FC<{ data: ChartData }> = ({ data }) => {
     const svgRef = useRef<SVGSVGElement>(null);
-    // FIX: Replaced JSX.Element with React.ReactNode to resolve "Cannot find namespace 'JSX'" error.
     const [tooltip, setTooltip] = useState<{ x: number; y: number; content: React.ReactNode } | null>(null);
 
     const MARGIN = { top: 20, right: 40, bottom: 40, left: 50 };

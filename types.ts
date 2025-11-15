@@ -46,3 +46,11 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
 }
+
+export interface Article {
+  title: string;
+  link: string;
+  description: string;
+  imageUrl: string;
+  pubDate: string;
+}

@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, ClockIcon, MenuIcon, XIcon } from './components/icons';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article } from './types';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, ClockIcon, MenuIcon, XIcon, NewspaperIcon } from './components/icons';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQAqF8HCmEs0iGvEO0jItWZl_PfIF2Igy8PoNhEnQjB-C92vCyWvSMRB00FpsNseEA8T-7Ip4GfDPf3/pub?gid=0&single=true&output=csv';
 
@@ -170,7 +171,7 @@ const parseMotoGpData = (csvText: string): MotoGpData => {
     return { races, standings, playerVotes, driverVoteCounts, motogpResults, allDrivers };
 };
 
-type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'statistics';
+type Tab = 'dashboard' | 'standings' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'statistics' | 'noticias';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
@@ -180,6 +181,7 @@ const TABS: { name: string; tab: Tab }[] = [
     { name: "Participantes", tab: "participantes" },
     { name: "Resultados MotoGP", tab: "motogp_results" },
     { name: "Estadísticas", tab: "statistics" },
+    { name: "Noticias", tab: "noticias" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -269,6 +271,8 @@ const App: React.FC = () => {
                 return <LiveTimingTab />;
             case 'statistics':
                 return <StatisticsTab data={motoGpData} />;
+            case 'noticias':
+                return <NewsTab />;
             default:
                 return null;
         }
@@ -821,6 +825,103 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     );
 };
 
+const NewsTab: React.FC = () => {
+    const [articles, setArticles] = useState<Article[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const RSS_URL = 'https://es.motorsport.com/rss/motogp/news/';
+    // Usamos un proxy CORS diferente y más fiable para evitar errores de fetch.
+    const PROXY_URL = 'https://corsproxy.io/?';
+
+    useEffect(() => {
+        const fetchNews = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                // La URL del feed debe estar codificada para que el proxy la maneje correctamente.
+                const response = await fetch(`${PROXY_URL}${encodeURIComponent(RSS_URL)}`);
+                if (!response.ok) {
+                    throw new Error(`Error al obtener el feed de noticias (código ${response.status})`);
+                }
+                const text = await response.text();
+                
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, 'application/xml');
+                const errorNode = xml.querySelector('parsererror');
+                if (errorNode) {
+                    throw new Error('Error al analizar el feed RSS.');
+                }
+
+                const items = Array.from(xml.querySelectorAll('item')).slice(0, 6);
+                
+                const parsedArticles: Article[] = items.map(item => {
+                    const title = item.querySelector('title')?.textContent?.trim() || 'Sin título';
+                    const link = item.querySelector('link')?.textContent || '#';
+                    let description = item.querySelector('description')?.textContent?.trim() || '';
+                    
+                    description = description.split('<a class=\'more\'')[0].trim();
+                    description = description.replace(/<br\s*\/?>/gi, ' ').replace(/Recuerda:/gi, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+
+                    const imageUrl = item.querySelector('enclosure')?.getAttribute('url') || '';
+                    const pubDateStr = item.querySelector('pubDate')?.textContent || '';
+                    const pubDate = pubDateStr ? new Date(pubDateStr).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+
+                    return { title, link, description, imageUrl, pubDate };
+                });
+                setArticles(parsedArticles);
+
+            } catch (err: any) {
+                setError(err.message || 'Ocurrió un error al cargar las noticias.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchNews();
+    }, []);
+
+    if (isLoading) {
+        return (
+            <div className="text-center">
+                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-lg text-gray-300">Cargando noticias...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return <p className="text-center text-red-400">{error}</p>;
+    }
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="flex items-center mb-6">
+                <NewspaperIcon className="w-8 h-8 motogp-red mr-3"/>
+                <h2 className="font-orbitron text-3xl text-white">Últimas Noticias</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {articles.map((article, index) => (
+                    <a 
+                        key={index} 
+                        href={article.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-2 transition-transform duration-300 flex flex-col"
+                    >
+                        <div className="w-full h-48 overflow-hidden">
+                             <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                        </div>
+                        <div className="p-4 flex flex-col flex-grow">
+                            <p className="text-xs text-gray-400 mb-2">{article.pubDate}</p>
+                            <h3 className="font-bold text-md text-white group-hover:motogp-red transition-colors flex-grow">{article.title}</h3>
+                            <p className="text-sm text-gray-300 mt-2 line-clamp-3">{article.description}</p>
+                        </div>
+                    </a>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 // --- Sub-components ---
 
@@ -835,7 +936,6 @@ type ChartData = {
 
 const EvolutionChart: React.FC<{ data: ChartData }> = ({ data }) => {
     const svgRef = useRef<SVGSVGElement>(null);
-    // FIX: Replaced JSX.Element with React.ReactNode to resolve "Cannot find namespace 'JSX'" error.
     const [tooltip, setTooltip] = useState<{ x: number; y: number; content: React.ReactNode } | null>(null);
 
     const MARGIN = { top: 20, right: 40, bottom: 40, left: 50 };
