@@ -1,0 +1,27 @@
+{
+  "name": "PorraGP Full 2025",
+  "short_name": "PorraGP",
+  "description": "Una aplicación conectada para gestionar y visualizar estadísticas de la porra de MotoGP a partir de datos de Google Sheets.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#E50914",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}
