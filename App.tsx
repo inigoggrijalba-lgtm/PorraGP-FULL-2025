@@ -3,6 +3,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData, getStatisticalInsight } from './services/geminiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article } from './types';
@@ -1166,6 +1168,7 @@ const NewsTab: React.FC = () => {
     const [articles, setArticles] = useState<Article[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(0);
 
     const RSS_URL = 'https://es.motorsport.com/rss/motogp/news/';
     // Usamos un proxy CORS diferente y más fiable para evitar errores de fetch.
@@ -1190,7 +1193,7 @@ const NewsTab: React.FC = () => {
                     throw new Error('Error al analizar el feed RSS.');
                 }
 
-                const items = Array.from(xml.querySelectorAll('item')).slice(0, 6);
+                const items = Array.from(xml.querySelectorAll('item'));
                 
                 const parsedArticles: Article[] = items.map(item => {
                     const title = item.querySelector('title')?.textContent?.trim() || 'Sin título';
@@ -1217,6 +1220,13 @@ const NewsTab: React.FC = () => {
         fetchNews();
     }, []);
 
+    const ARTICLES_PER_PAGE = 6;
+    const indexOfLastArticle = (currentPage + 1) * ARTICLES_PER_PAGE;
+    const indexOfFirstArticle = indexOfLastArticle - ARTICLES_PER_PAGE;
+    const currentArticles = articles.slice(indexOfFirstArticle, indexOfLastArticle);
+    const totalPages = Math.ceil(articles.length / ARTICLES_PER_PAGE);
+
+
     if (isLoading) {
         return (
             <div className="text-center">
@@ -1237,7 +1247,7 @@ const NewsTab: React.FC = () => {
                 <h2 className="font-orbitron text-3xl text-white">Últimas Noticias</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {articles.map((article, index) => (
+                {currentArticles.map((article, index) => (
                     <a 
                         key={index} 
                         href={article.link} 
@@ -1251,11 +1261,36 @@ const NewsTab: React.FC = () => {
                         <div className="p-4 flex flex-col flex-grow">
                             <p className="text-xs text-gray-400 mb-2">{article.pubDate}</p>
                             <h3 className="font-bold text-md text-white group-hover:motogp-red transition-colors flex-grow">{article.title}</h3>
-                            <p className="text-sm text-gray-300 mt-2 line-clamp-3">{article.description}</p>
+                            <p className="text-sm text-gray-300 mt-2">{article.description}</p>
                         </div>
                     </a>
                 ))}
             </div>
+            
+            <div className="mt-8 flex justify-center items-center gap-4">
+                {currentPage > 0 && (
+                    <button
+                        onClick={() => setCurrentPage(prev => prev - 1)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors"
+                    >
+                        Anterior
+                    </button>
+                )}
+                 {totalPages > 1 && (
+                    <span className="text-gray-400">
+                        Página {currentPage + 1} de {totalPages}
+                    </span>
+                 )}
+                {currentPage < totalPages - 1 && (
+                    <button
+                        onClick={() => setCurrentPage(prev => prev + 1)}
+                        className="motogp-red-bg text-white font-bold py-2 px-6 rounded-lg transition-colors hover:bg-red-700"
+                    >
+                        Siguiente
+                    </button>
+                )}
+            </div>
+
         </div>
     );
 };
