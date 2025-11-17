@@ -1,5 +1,8 @@
 
 
+
+
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData, getStatisticalInsight } from './services/geminiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article } from './types';
@@ -87,10 +90,14 @@ const parseMotoGpData = (csvText: string): MotoGpData => {
     for (let i = 3; i < 16; i++) {
         if (!dataGrid[i] || !dataGrid[i][0]) continue;
         const row = dataGrid[i];
+        const pointsPerRace = row.slice(2, 24).map(p => parseFloat(p) || 0);
+        // Se calcula el total de puntos sumando los puntos de cada carrera,
+        // ignorando el total precalculado en la hoja de cálculo.
+        const totalPoints = pointsPerRace.reduce((sum, current) => sum + current, 0);
         standings.push({
             player: row[0].trim(),
-            totalPoints: parseFloat(row[1]) || 0,
-            pointsPerRace: row.slice(2, 24).map(p => parseFloat(p) || 0),
+            totalPoints: totalPoints,
+            pointsPerRace: pointsPerRace,
         });
     }
     standings.sort((a, b) => b.totalPoints - a.totalPoints);
@@ -244,12 +251,16 @@ const App: React.FC = () => {
         
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/PorraGP-FULL-2025/service-worker.js')
+                // Usamos la variable de entorno BASE_URL de Vite para construir la ruta correcta.
+                // Se añade optional chaining y un fallback para entornos donde vite no inyecta las variables.
+                const baseUrl = import.meta.env?.BASE_URL ?? '/PorraGP-FULL-2025/';
+                const swUrl = `${baseUrl}service-worker.js`;
+                navigator.serviceWorker.register(swUrl)
                     .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                        console.log('ServiceWorker registrado correctamente en:', registration.scope);
                     })
                     .catch(err => {
-                        console.log('ServiceWorker registration failed: ', err);
+                        console.error('Error en el registro de ServiceWorker:', err);
                     });
             });
         }
@@ -314,7 +325,7 @@ const App: React.FC = () => {
                 <RefreshButton onClick={fetchData} isLoading={isLoading} />
             </header>
 
-            <div className="w-full max-w-7xl mx-auto">
+            <main className="w-full max-w-7xl mx-auto flex-grow">
                 <div className="mb-8 border-b border-gray-700 flex justify-between items-center">
                     {/* Mobile Menu Button & Dropdown */}
                     <div className="sm:hidden relative">
@@ -367,8 +378,12 @@ const App: React.FC = () => {
                     </button>
                 </div>
                 {renderContent()}
-            </div>
+            </main>
             
+            <footer className="w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0">
+                 <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
+            </footer>
+
              <ChatBubbleButton onClick={() => setIsChatOpen(true)} />
             {isChatOpen && motoGpData && (
                 <ChatWindow

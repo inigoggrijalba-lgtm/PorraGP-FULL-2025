@@ -3,6 +3,8 @@
 declare global {
   interface ImportMetaEnv {
     readonly BUILD_TIMESTAMP: string;
+    // fix: Add BASE_URL to fix TypeScript error in src/App.tsx
+    readonly BASE_URL: string;
   }
   interface ImportMeta {
     readonly env: ImportMetaEnv;
