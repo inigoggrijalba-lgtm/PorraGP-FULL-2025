@@ -1,11 +1,12 @@
 {
   "name": "PorraGP Full 2025",
   "short_name": "PorraGP",
-  "description": "Una aplicación conectada para gestionar y visualizar estadísticas de la porra de MotoGP a partir de datos de Google Sheets.",
+  "description": "El dashboard definitivo para la porra de MotoGP. Sigue la clasificación, analiza estadísticas y no te pierdas ninguna carrera.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#121212",
   "theme_color": "#E50914",
+  "categories": ["sports", "entertainment", "games"],
   "icons": [
     {
       "src": "icons/icon-192x192.png",
@@ -22,6 +23,26 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/screenshot1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Clasificación General"
+    },
+    {
+      "src": "screenshots/screenshot2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Análisis de Evolución"
+    },
+    {
+      "src": "screenshots/screenshot3.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Resultados del Circuito"
     }
   ]
 }
