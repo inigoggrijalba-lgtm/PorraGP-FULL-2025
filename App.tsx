@@ -1,13 +1,7 @@
-
-
-
-
-
-
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { chatWithData, getStatisticalInsight } from './services/geminiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article } from './types';
+import { chatWithData } from './services/geminiService';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -73,7 +67,7 @@ const getRiderColor = (riderName: string): string => {
 };
 
 
-const parseMotoGpData = (csvText: string): MotoGpData => {
+const parseCsvData = (csvText: string): MotoGpData => {
     const lines = csvText.trim().replace(/\r/g, '').split('\n');
     const dataGrid = lines.map(line => line.split(','));
 
@@ -148,59 +142,63 @@ const parseMotoGpData = (csvText: string): MotoGpData => {
     });
 
     driverVoteCounts.sort((a, b) => b.totalVotes - a.totalVotes);
-    
+
     // --- Resultados Oficiales MotoGP ---
     const motogpResults: CircuitResult[] = [];
-    for (let j = 2; j < 24; j++) { // Iterar por columnas de circuitos
-        const circuitName = dataGrid[2][j]?.trim();
-        if (!circuitName) continue;
+    const sprintPoints = [12, 9, 7, 6, 5, 4, 3, 2, 1];
+    const racePoints = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
+    races.forEach((race, raceIndex) => {
+        const columnIndex = raceIndex + 2;
         const sprintResults: RaceResult[] = [];
-        for (let i = 49; i <= 57; i++) { // Filas de Sprint (50-58 en CSV)
-            const driver = dataGrid[i]?.[j]?.trim();
-            if (driver) {
+        // SPRINT results from row 50 (index 49)
+        for (let i = 0; i < 10; i++) {
+            const driverRow = 49 + i;
+            if (dataGrid[driverRow] && dataGrid[driverRow][columnIndex]?.trim()) {
                 sprintResults.push({
-                    position: i - 48,
-                    driver: driver,
-                    points: parseInt(dataGrid[i][0]) || 0,
+                    position: i + 1,
+                    driver: dataGrid[driverRow][columnIndex].trim(),
+                    points: sprintPoints[i] || 0,
                 });
             }
         }
 
         const raceResults: RaceResult[] = [];
-        for (let i = 59; i <= 73; i++) { // Filas de Race (60-74 en CSV)
-            const driver = dataGrid[i]?.[j]?.trim();
-            if (driver) {
+        // RACE results from row 60 (index 59)
+        for (let i = 0; i < 10; i++) {
+            const driverRow = 59 + i;
+            if (dataGrid[driverRow] && dataGrid[driverRow][columnIndex]?.trim()) {
                 raceResults.push({
-                    position: i - 58,
-                    driver: driver,
-                    points: parseInt(dataGrid[i][0]) || 0,
+                    position: i + 1,
+                    driver: dataGrid[driverRow][columnIndex].trim(),
+                    points: racePoints[i] || 0,
                 });
             }
         }
 
         motogpResults.push({
-            circuit: circuitName,
+            circuit: race.circuit,
             sprint: sprintResults,
             race: raceResults,
         });
-    }
-
+    });
 
     return { races, standings, playerVotes, driverVoteCounts, motogpResults, allDrivers };
 };
 
-type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias';
+
+type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_prueba';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
-    { name: "Clasificación", tab: "standings" },
+    { name: "Clasificación Porra", tab: "standings" },
     { name: "Votar", tab: "votar" },
-    { name: "Circuitos", tab: "circuits" },
-    { name: "Participantes", tab: "participantes" },
+    { name: "Resultados Porra", tab: "circuits" },
+    { name: "Resultados MGP", tab: "motogp_results" },
+    { name: "Votos pilotos", tab: "participantes" },
     { name: "Estadísticas", tab: "statistics" },
-    { name: "Resultados MotoGP", tab: "motogp_results" },
     { name: "Noticias", tab: "noticias" },
+    { name: "Info Prueba", tab: "info_prueba" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -231,7 +229,7 @@ const App: React.FC = () => {
         setIsLoading(true);
         setError(null);
         try {
-            // Add a cache-busting parameter to the URL
+            // Se añade un parámetro a la URL para evitar problemas de caché
             const url = `${SHEET_URL}&_=${new Date().getTime()}`;
             const response = await fetch(url);
             if (!response.ok) {
@@ -239,7 +237,7 @@ const App: React.FC = () => {
             }
             const text = await response.text();
             setRawCsv(text);
-            const data = parseMotoGpData(text);
+            const data = parseCsvData(text);
             setMotoGpData(data);
         } catch (err: any) {
             setError(err.message || 'Ocurrió un error al procesar los datos.');
@@ -309,6 +307,8 @@ const App: React.FC = () => {
                 return <LiveTimingTab />;
             case 'noticias':
                 return <NewsTab />;
+            case 'info_prueba':
+                return <InfoPruebaTab />;
             default:
                 return null;
         }
@@ -488,8 +488,8 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
     const [installModalOS, setInstallModalOS] = useState<'android' | 'ios' | null>(null);
 
-    const leader = data.standings[0];
-    const mostVotedDriver = data.driverVoteCounts[0];
+    const leader = data.standings && data.standings.length > 0 ? data.standings[0] : undefined;
+    const mostVotedDriver = data.driverVoteCounts && data.driverVoteCounts.length > 0 ? data.driverVoteCounts[0] : undefined;
     
     const nextRaceInfo = useMemo(() => {
         const today = new Date();
@@ -524,14 +524,14 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
     return (
         <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Líder del Campeonato" value={leader.player} metric={`${leader.totalPoints} Pts`} icon={<TrophyIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
+                <StatCard title="Líder del Campeonato" value={leader ? leader.player : 'N/A'} metric={leader ? `${leader.totalPoints} Pts` : '-'} icon={<TrophyIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
                 <StatCard 
                     title="Próxima Carrera" 
                     value={nextRaceInfo.seasonOver ? 'TEMPORADA FINALIZADA' : (nextRaceInfo.race?.circuit ?? 'N/A')} 
                     metric={nextRaceInfo.seasonOver ? 'Gracias por participar' : (nextRaceInfo.race ? `${nextRaceInfo.race.date} - ${nextRaceInfo.race.time}` : 'TBC')} 
                     icon={<FlagIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} 
                 />
-                <StatCard title="Piloto más Votado (Global)" value={mostVotedDriver.driver} metric={`${mostVotedDriver.totalVotes} Votos`} icon={<SparklesIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
+                <StatCard title="Piloto más Votado (Global)" value={mostVotedDriver ? mostVotedDriver.driver : 'N/A'} metric={mostVotedDriver ? `${mostVotedDriver.totalVotes} Votos` : '-'} icon={<SparklesIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
                 <button
                     onClick={() => setActiveTab('votar')}
                     className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-green-500 hover:bg-gray-800/60 hover:shadow-green-900/50 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
@@ -716,8 +716,6 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
 
 const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
-    const [insight, setInsight] = useState<string>("Selecciona uno o más jugadores para ver una curiosidad estadística.");
-    const [isInsightLoading, setIsInsightLoading] = useState(false);
 
     const playerColors = useMemo(() => {
         const colors = new Map<string, string>();
@@ -734,48 +732,10 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                 : [...prev, playerName]
         );
     };
-    
-    useEffect(() => {
-        const fetchInsight = async () => {
-            if (selectedPlayers.length > 0) {
-                setIsInsightLoading(true);
-                const selectedPlayerData = data.standings.filter(p => selectedPlayers.includes(p.player));
-                const newInsight = await getStatisticalInsight(data, selectedPlayerData);
-                setInsight(newInsight);
-                setIsInsightLoading(false);
-            } else {
-                setInsight("Selecciona uno o más jugadores para ver una curiosidad estadística.");
-            }
-        };
-        
-        // Debounce the call to avoid too many requests
-        const handler = setTimeout(() => {
-            fetchInsight();
-        }, 500);
-
-        return () => {
-            clearTimeout(handler);
-        };
-
-    }, [selectedPlayers, data]);
-
 
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <h2 className="font-orbitron text-2xl mb-4 text-white">Análisis de Evolución</h2>
-
-            {/* Insight Box */}
-            <div className="mb-6 p-4 rounded-lg bg-gray-900/50 border border-gray-700 min-h-[60px] flex items-center justify-center">
-                <p className="text-center text-gray-300 italic">
-                    {isInsightLoading ? (
-                        <span className="flex items-center justify-center">
-                            <SparklesIcon className="w-5 h-5 mr-2 animate-pulse" /> Analizando...
-                        </span>
-                    ) : (
-                       `"${insight}"`
-                    )}
-                </p>
-            </div>
             
             {/* Player Selection Buttons */}
             <div className="flex flex-wrap gap-2 mb-6 justify-center">
@@ -930,6 +890,10 @@ const EvolutionChart: React.FC<{
 
 const CircuitsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     const [selectedCircuitIndex, setSelectedCircuitIndex] = useState(0);
+    
+    if (!data.races || data.races.length === 0) {
+        return <div className="text-center text-gray-400">No hay datos de circuitos disponibles.</div>;
+    }
 
     const getRaceData = (raceIndex: number) => {
         return data.standings.map(player => ({
@@ -973,7 +937,7 @@ const CircuitsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
             </div>
             <div className="lg:col-span-2 card-bg p-4 sm:p-6 rounded-xl shadow-lg">
                 <h2 className="font-orbitron text-2xl mb-4 text-white">
-                    Resultados de <span className="motogp-red">{data.races[selectedCircuitIndex].circuit}</span>
+                    Resultados de <span className="motogp-red">{data.races[selectedCircuitIndex]?.circuit ?? 'N/A'}</span>
                 </h2>
                  <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-300">
@@ -1142,22 +1106,20 @@ const VotarTab: React.FC = () => {
 };
 
 const LiveTimingTab: React.FC = () => {
-    const liveTimingUrl = "https://script.google.com/macros/s/AKfycbx5Vp4mkLQNYK8po66EJcB5h68cW9yfHHvJ2d_1-dC-IJRoO4jn5nYcn_0XYSRuS0KN/exec";
+    const liveTimingUrl = "https://www.motogp.com/en/live-timing";
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
-            <h2 className="font-orbitron text-2xl mb-4 text-white">Live Timing</h2>
-            <p className="text-gray-400 mb-6">Resultados en directo de la sesión actual. Los datos pueden tardar unos segundos en cargar.</p>
-            <div className="w-full h-[1200px] overflow-hidden rounded-lg">
+            <h2 className="font-orbitron text-2xl mb-4 text-white">Live Timing Oficial</h2>
+            <p className="text-gray-400 mb-6">Se muestra el Live Timing oficial de MotoGP.com. La funcionalidad puede ser limitada dentro de este marco.</p>
+            <div className="w-full h-[1000px] bg-white rounded-lg overflow-hidden">
                  <iframe
                     src={liveTimingUrl}
                     width="100%"
-                    height="1200"
-                    frameBorder="0"
-                    marginHeight={0}
-                    marginWidth={0}
-                    title="Live Timing MotoGP"
+                    height="100%"
+                    style={{ border: 'none' }}
+                    title="Live Timing Oficial de MotoGP"
                     >
-                    Cargando…
+                    Cargando Live Timing...
                 </iframe>
             </div>
         </div>
@@ -1627,5 +1589,222 @@ const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> 
         </div>
     );
 };
+
+const InfoPruebaTab: React.FC = () => {
+    const [seasons, setSeasons] = useState<ApiSeason[]>([]);
+    const [riders, setRiders] = useState<ApiRider[]>([]);
+    const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+    const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState({ seasons: true, riders: false });
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const loadSeasons = async () => {
+            try {
+                setError(null);
+                setIsLoading(prev => ({ ...prev, seasons: true }));
+                const fetchedSeasons = await fetchSeasons();
+                setSeasons(fetchedSeasons);
+                if (fetchedSeasons.length > 0) {
+                    const currentSeason = fetchedSeasons.find(s => s.current) || fetchedSeasons[0];
+                    setSelectedSeason(currentSeason.year);
+                }
+            } catch (err: any) {
+                setError(err.message || 'No se pudieron cargar las temporadas.');
+            } finally {
+                setIsLoading(prev => ({ ...prev, seasons: false }));
+            }
+        };
+        loadSeasons();
+    }, []);
+
+    useEffect(() => {
+        if (!selectedSeason) return;
+
+        const loadRiders = async () => {
+            try {
+                setError(null);
+                setIsLoading(prev => ({ ...prev, riders: true }));
+                setRiders([]); // Limpiar la lista de pilotos mientras se carga la nueva
+                const fetchedRiders = await fetchRidersBySeason(selectedSeason);
+                setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
+            } catch (err: any) {
+                setError(err.message || `No se pudieron cargar los pilotos para ${selectedSeason}.`);
+            } finally {
+                setIsLoading(prev => ({ ...prev, riders: false }));
+            }
+        };
+        loadRiders();
+    }, [selectedSeason]);
+
+    if (selectedRiderId) {
+        return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
+    }
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h2 className="font-orbitron text-2xl text-white">Información de Pilotos</h2>
+                {isLoading.seasons ? (
+                    <div className="h-10 bg-gray-700 rounded-md w-48 animate-pulse"></div>
+                ) : (
+                    <select
+                        value={selectedSeason || ''}
+                        onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                        className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block w-full sm:w-auto p-2.5"
+                    >
+                        {seasons.map(season => (
+                            <option key={season.id} value={season.year}>Temporada {season.year}</option>
+                        ))}
+                    </select>
+                )}
+            </div>
+
+            {isLoading.riders && (
+                <div className="text-center py-8">
+                    <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-300">Cargando pilotos de {selectedSeason}...</p>
+                </div>
+            )}
+
+            {error && <p className="text-center text-red-400 py-8">{error}</p>}
+            
+            {!isLoading.riders && !error && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {riders.map(rider => (
+                        <RiderCard key={rider.id} rider={rider} onSelect={() => setSelectedRiderId(rider.id)} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const RiderCard: React.FC<{ rider: ApiRider; onSelect: () => void; }> = ({ rider, onSelect }) => {
+    const profilePic = rider.current_career_step?.pictures?.profile?.main;
+    return (
+        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full">
+            <div className="relative h-48 bg-gray-800">
+                {profilePic ? (
+                    <img src={profilePic} alt={`${rider.name} ${rider.surname}`} className="w-full h-full object-cover object-top" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <UserIcon className="w-16 h-16 text-gray-600" />
+                    </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                <div className="absolute bottom-0 left-0 p-3">
+                    <div className="flex items-center gap-2">
+                        <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm" />
+                        <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate">{rider.name} {rider.surname}</h3>
+                    </div>
+                </div>
+                 <div className="absolute top-2 right-2 bg-black/50 text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md">
+                    {rider.current_career_step?.number}
+                </div>
+            </div>
+        </button>
+    );
+};
+
+const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ riderId, onBack }) => {
+    const [rider, setRider] = useState<ApiRider | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const loadRiderDetails = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                const details = await fetchRiderDetails(riderId);
+                setRider(details);
+            } catch (err: any) {
+                setError(err.message || 'No se pudo cargar la ficha del piloto.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadRiderDetails();
+    }, [riderId]);
+
+    if (isLoading) {
+        return (
+             <div className="text-center py-8">
+                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-gray-300">Cargando ficha del piloto...</p>
+            </div>
+        );
+    }
+    
+    if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
+    if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
+
+    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, current_career_step } = rider;
+    const { team, pictures } = current_career_step;
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver a la lista
+            </button>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 space-y-4">
+                     {pictures.profile.main && <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full rounded-lg shadow-lg object-cover" />}
+                     {pictures.bike.main && <img src={pictures.bike.main} alt="Moto" className="w-full rounded-lg shadow-lg" />}
+                     {pictures.helmet.main && <img src={pictures.helmet.main} alt="Casco" className="w-full rounded-lg shadow-lg" />}
+                </div>
+
+                <div className="md:col-span-2">
+                    <div className="flex items-center gap-4 mb-4">
+                        <img src={country.flag} alt={country.name} className="w-12 h-8 object-cover rounded-md shadow-md"/>
+                        <div>
+                            <h2 className="font-orbitron text-3xl sm:text-4xl text-white">{name} <span className="motogp-red">{surname}</span></h2>
+                            <p className="font-orbitron text-5xl sm:text-6xl text-gray-400 -mt-2">{current_career_step.number}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+                        <InfoBlock title="Datos Personales">
+                            <InfoItem label="País" value={country.name} />
+                            <InfoItem label="Ciudad Natal" value={birth_city} />
+                            <InfoItem label="Fecha de Nac." value={new Date(birth_date).toLocaleDateString('es-ES')} />
+                            <InfoItem label="Edad" value={`${years_old} años`} />
+                        </InfoBlock>
+                        
+                        {physical_attributes && (
+                            <InfoBlock title="Atributos Físicos">
+                                <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
+                                <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
+                            </InfoBlock>
+                        )}
+
+                        <InfoBlock title="Equipo Actual">
+                            <InfoItem label="Equipo" value={team.name} />
+                            <InfoItem label="Constructor" value={team.constructor.name} />
+                            <InfoItem label="Categoría" value={current_career_step.category.name} />
+                             {team.picture && <img src={team.picture} alt={team.name} className="mt-4 rounded-md" />}
+                        </InfoBlock>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const InfoBlock: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
+    <div className="bg-gray-900/50 p-4 rounded-lg">
+        <h3 className="font-orbitron text-lg motogp-red mb-3 border-b border-gray-700 pb-2">{title}</h3>
+        <div className="space-y-2">{children}</div>
+    </div>
+);
+
+const InfoItem: React.FC<{ label: string, value: string | number }> = ({ label, value }) => (
+    <div className="flex justify-between text-sm">
+        <span className="text-gray-400">{label}:</span>
+        <span className="font-bold text-white text-right">{value}</span>
+    </div>
+);
 
 export default App;
