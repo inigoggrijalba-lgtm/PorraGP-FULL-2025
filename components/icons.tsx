@@ -158,3 +158,11 @@ export const ShareIcon: React.FC<{ className?: string }> = ({ className }) => (
 export const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
     <span className={`material-symbols-outlined inline-flex items-center justify-center ${className}`}>download</span>
 );
+
+export const FullscreenIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <span className={`material-symbols-outlined inline-flex items-center justify-center ${className}`}>fullscreen</span>
+);
+
+export const FullscreenExitIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <span className={`material-symbols-outlined inline-flex items-center justify-center ${className}`}>fullscreen_exit</span>
+);

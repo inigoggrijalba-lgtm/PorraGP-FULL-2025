@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon } from './components/icons';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingData, LiveTimingRider } from './types';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
 
@@ -273,6 +273,10 @@ const App: React.FC = () => {
     }
 
     const renderContent = () => {
+        // Redirige a la pestaña de Live Timing si se solicita específicamente
+        if (activeTab === 'livetiming') {
+            return <LiveTimingTab />;
+        }
         if (isLoading) {
             return (
                 <div className="text-center">
@@ -303,8 +307,6 @@ const App: React.FC = () => {
                  return <MotoGpResultsTab data={motoGpData} />;
              case 'votar':
                 return <VotarTab />;
-            case 'livetiming':
-                return <LiveTimingTab />;
             case 'noticias':
                 return <NewsTab />;
             case 'info_prueba':
@@ -663,12 +665,14 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                                     <th scope="col" className="px-2 py-3 text-center">Puntos</th>
                                     <th scope="col" className="px-2 py-3 text-center" title="Diferencia con el líder">Dif. 1º</th>
                                     <th scope="col" className="px-2 py-3 text-center" title="Diferencia con el siguiente">Dif. Sig.</th>
+                                    <th scope="col" className="px-2 py-3 text-center">Ult. Carr.</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.standings.map((player, index) => {
                                     const diffFromLeader = leaderPoints - player.totalPoints;
                                     const diffFromNext = index > 0 ? (data.standings[index - 1].totalPoints - player.totalPoints) : 0;
+                                    const lastRacePoints = currentRaceNumber > 0 ? player.pointsPerRace[currentRaceNumber - 1] || 0 : 0;
 
                                     return (
                                         <tr key={player.player} className="border-b border-gray-700 hover:bg-gray-800/50">
@@ -681,6 +685,7 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                                             <td className="px-2 py-4 text-center motogp-red font-orbitron">{player.totalPoints}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromLeader}`}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromNext}`}</td>
+                                            <td className="px-2 py-4 text-center">{lastRacePoints}</td>
                                         </tr>
                                     );
                                 })}
@@ -1106,25 +1111,219 @@ const VotarTab: React.FC = () => {
 };
 
 const LiveTimingTab: React.FC = () => {
-    const liveTimingUrl = "https://www.motogp.com/en/live-timing";
+    const [liveData, setLiveData] = useState<LiveTimingData | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [previousRiders, setPreviousRiders] = useState<Map<number, LiveTimingRider>>(new Map());
+    const fullscreenRef = useRef<HTMLDivElement>(null);
+    const wakeLockSentinelRef = useRef<any>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    const fetchData = useCallback(async () => {
+        if (!liveData) setIsLoading(true);
+        setError(null);
+
+        try {
+            const data = await fetchLiveTiming();
+            if (liveData) {
+                const prevMap = new Map<number, LiveTimingRider>();
+                (Object.values(liveData.rider) as LiveTimingRider[]).forEach(r => prevMap.set(r.rider_id, r));
+                setPreviousRiders(prevMap);
+            }
+            setLiveData(data);
+        } catch (err: any) {
+            setError(err.message || 'No se pudo cargar el Live Timing.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [liveData]);
+
+    const handleFullscreenChange = useCallback(() => {
+        setIsFullscreen(!!document.fullscreenElement);
+    }, []);
+
+    const releaseWakeLock = useCallback(async () => {
+        if (wakeLockSentinelRef.current) {
+            await wakeLockSentinelRef.current.release();
+            wakeLockSentinelRef.current = null;
+        }
+    }, []);
+
+    const toggleFullscreen = useCallback(async () => {
+        if (!document.fullscreenElement) {
+            try {
+                await fullscreenRef.current?.requestFullscreen();
+                if ('wakeLock' in navigator) {
+                    wakeLockSentinelRef.current = await navigator.wakeLock.request('screen');
+                }
+            } catch (err: any) {
+                console.error(`Error al activar pantalla completa: ${err.message}`);
+            }
+        } else {
+            await document.exitFullscreen();
+        }
+    }, []);
+
+    useEffect(() => {
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            releaseWakeLock();
+        };
+    }, [handleFullscreenChange, releaseWakeLock]);
+
+    useEffect(() => {
+        if (!isFullscreen) {
+            releaseWakeLock();
+        }
+    }, [isFullscreen, releaseWakeLock]);
+
+    useEffect(() => {
+        fetchData();
+        const intervalId = setInterval(fetchData, 5000);
+        return () => clearInterval(intervalId);
+    }, [fetchData]);
+
+    const formatTime = (secondsStr: string) => {
+        const totalSeconds = parseInt(secondsStr, 10);
+        if (isNaN(totalSeconds) || totalSeconds < 0) return '00:00:00';
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (hours > 0) {
+            return `${String(hours)}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
+    const getStatusColorClass = (status: string) => {
+        switch (status) {
+            case 'S': return 'bg-green-500'; // Session Started
+            case 'F': return 'bg-white';     // Session Finished
+            case 'R': return 'bg-red-500';     // Red Flag
+            case 'N':                         // Not started / Interrupted
+            default: return 'bg-gray-500';
+        }
+    };
+    
+    if (isLoading) {
+        return (
+            <div className="text-center">
+                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-lg text-gray-300">Conectando al Live Timing...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return <p className="text-center text-red-400">{error}</p>;
+    }
+
+    if (!liveData) {
+        return <p className="text-center text-gray-400">No hay datos de Live Timing disponibles.</p>;
+    }
+
+    const sortedRiders = (Object.values(liveData.rider) as LiveTimingRider[]).sort((a, b) => a.order - b.order);
+    const ROW_HEIGHT_PX = 40;
+    const containerHeight = sortedRiders.length * ROW_HEIGHT_PX;
+
     return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
-            <h2 className="font-orbitron text-2xl mb-4 text-white">Live Timing Oficial</h2>
-            <p className="text-gray-400 mb-6">Se muestra el Live Timing oficial de MotoGP.com. La funcionalidad puede ser limitada dentro de este marco.</p>
-            <div className="w-full h-[1000px] bg-white rounded-lg overflow-hidden">
-                 <iframe
-                    src={liveTimingUrl}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 'none' }}
-                    title="Live Timing Oficial de MotoGP"
-                    >
-                    Cargando Live Timing...
-                </iframe>
+        <div ref={fullscreenRef} className="card-bg rounded-xl shadow-lg overflow-hidden data-[fullscreen=true]:bg-gray-900" data-fullscreen={isFullscreen}>
+            <header className="p-4 bg-gray-900/50 flex justify-between items-center text-white">
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h2 className="font-orbitron font-bold text-xl">{liveData.head.category} <span className="text-gray-400">{liveData.head.session_name}</span></h2>
+                        <p className="text-xs text-gray-400">{liveData.head.circuit_name}</p>
+                    </div>
+                </div>
+                 <div className="flex items-center gap-4">
+                    <div className="text-right">
+                        <div className="flex items-center justify-end gap-3">
+                            <span className={`w-4 h-4 rounded-full animate-pulse ${getStatusColorClass(liveData.head.session_status_name)}`} title={`Estado de la sesión: ${liveData.head.session_status_name}`}></span>
+                            <p className="font-orbitron font-bold text-2xl">{formatTime(liveData.head.remaining)}</p>
+                        </div>
+                        <p className="text-xs text-gray-400">{liveData.head.date_formated}</p>
+                    </div>
+                    <button onClick={toggleFullscreen} className="p-2 text-gray-300 hover:text-white transition-colors" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa'}>
+                        {isFullscreen ? <FullscreenExitIcon className="w-6 h-6" /> : <FullscreenIcon className="w-6 h-6" />}
+                    </button>
+                 </div>
+            </header>
+            <div className="overflow-x-auto">
+                <div className="w-full text-sm text-left text-gray-300 min-w-[1120px]">
+                    {/* Header Row using Flexbox */}
+                    <div className="text-xs text-gray-400 uppercase bg-gray-800/50 sticky top-0 z-10 flex">
+                        <div className="w-12 shrink-0 text-center px-2 py-3 font-normal">P</div>
+                        <div className="w-48 px-2 py-3 font-normal min-w-0">Rider</div>
+                        <div className="w-16 shrink-0 text-center px-2 py-3 font-normal">#</div>
+                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Best Lap</div>
+                        <div className="w-16 shrink-0 text-center px-2 py-3 font-normal">Lap</div>
+                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Last Lap</div>
+                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Gap P.</div>
+                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Gap F.</div>
+                        <div className="w-64 shrink-0 px-2 py-3 font-normal">Team</div>
+                        <div className="w-28 shrink-0 px-2 py-3 font-normal">Bike</div>
+                    </div>
+                    {/* Body container */}
+                    <div className="relative" style={{ height: `${containerHeight}px` }}>
+                        {sortedRiders.map((rider) => (
+                           <LiveTimingRow
+                                key={rider.rider_id}
+                                rider={rider}
+                                prevRider={previousRiders.get(rider.rider_id)}
+                                rowHeight={ROW_HEIGHT_PX}
+                           />
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );
 };
+
+const LiveTimingRow: React.FC<{rider: LiveTimingRider, prevRider?: LiveTimingRider, rowHeight: number}> = ({ rider, prevRider, rowHeight }) => {
+    const [highlight, setHighlight] = useState(false);
+
+    useEffect(() => {
+        if (prevRider && rider.order < prevRider.order) {
+            setHighlight(true);
+            const timer = setTimeout(() => setHighlight(false), 2500);
+            return () => clearTimeout(timer);
+        }
+    }, [rider.order, prevRider]);
+
+    const rowClasses = `live-timing-row flex items-center border-b border-gray-700/50 ${highlight ? 'highlight-red' : ''}`;
+    const rowStyle: React.CSSProperties = {
+        transform: `translateY(${(rider.order - 1) * rowHeight}px)`,
+        height: `${rowHeight}px`,
+    };
+    
+    return (
+        <div className={rowClasses} style={rowStyle}>
+            <div className="w-12 shrink-0 text-center px-2 font-bold">{rider.status_name}</div>
+            <div className="w-48 px-2 font-bold text-white whitespace-nowrap min-w-0 truncate" title={`${rider.rider_name} ${rider.rider_surname}`}>{rider.rider_name} {rider.rider_surname}</div>
+            <div className="w-16 shrink-0 text-center px-2">
+                 <div className="flex items-center justify-center gap-1">
+                    {rider.on_pit && <span className="text-xs bg-gray-500 text-white px-1 rounded-sm font-sans">PIT</span>}
+                    <span 
+                        className="w-7 h-5 flex items-center justify-center rounded-sm font-bold font-sans"
+                        style={{ backgroundColor: rider.color, color: rider.text_color }}
+                    >
+                        {rider.rider_number}
+                    </span>
+                 </div>
+            </div>
+            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.lap_time}</div>
+            <div className="w-16 shrink-0 text-center px-2 font-mono">{rider.num_lap}</div>
+            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.last_lap_time}</div>
+            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.gap_prev}</div>
+            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.gap_first}</div>
+            <div className="w-64 shrink-0 px-2 text-gray-400 whitespace-nowrap min-w-0 truncate" title={rider.team_name}>{rider.team_name}</div>
+            <div className="w-28 shrink-0 px-2 text-gray-400">{rider.bike_name}</div>
+        </div>
+    );
+};
+
 
 const NewsTab: React.FC = () => {
     const [articles, setArticles] = useState<Article[]>([]);
@@ -1205,7 +1404,6 @@ const NewsTab: React.FC = () => {
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex items-center mb-6">
-                <NewspaperIcon className="w-8 h-8 motogp-red mr-3"/>
                 <h2 className="font-orbitron text-3xl text-white">Últimas Noticias</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1595,35 +1793,23 @@ const InfoPruebaTab: React.FC = () => {
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [currentSeasonYear, setCurrentSeasonYear] = useState<number | null>(null);
-
+    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2025);
 
     useEffect(() => {
-        const loadCurrentSeasonAndRiders = async () => {
+        const loadRidersForSeason = async () => {
             try {
                 setError(null);
                 setIsLoading(true);
-
-                const fetchedSeasons = await fetchSeasons();
-                const currentSeason = fetchedSeasons.find(s => s.current);
-
-                if (!currentSeason) {
-                    throw new Error('No se pudo determinar la temporada actual.');
-                }
-                
-                setCurrentSeasonYear(currentSeason.year);
-                
-                const fetchedRiders = await fetchRidersBySeason(currentSeason.year);
+                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear);
                 setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
-
             } catch (err: any) {
-                setError(err.message || 'No se pudieron cargar los datos de la temporada.');
+                setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
             } finally {
                 setIsLoading(false);
             }
         };
-        loadCurrentSeasonAndRiders();
-    }, []);
+        loadRidersForSeason();
+    }, [selectedSeasonYear]);
 
     if (selectedRiderId) {
         return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
@@ -1632,18 +1818,25 @@ const InfoPruebaTab: React.FC = () => {
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h2 className="font-orbitron text-2xl text-white">Parrilla Actual de MotoGP</h2>
-                 {currentSeasonYear && !isLoading && (
-                    <span className="bg-gray-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg">
-                        Temporada {currentSeasonYear}
-                    </span>
-                 )}
+                <h2 className="font-orbitron text-2xl text-white">Parrilla de MotoGP</h2>
+                <select
+                    value={selectedSeasonYear}
+                    onChange={(e) => {
+                        setIsLoading(true);
+                        setSelectedSeasonYear(Number(e.target.value));
+                    }}
+                    className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none"
+                    aria-label="Seleccionar temporada"
+                >
+                    <option value="2025">Temporada 2025</option>
+                    <option value="2026">Temporada 2026</option>
+                </select>
             </div>
 
             {isLoading && (
                 <div className="text-center py-8">
                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla actual...</p>
+                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedSeasonYear}...</p>
                 </div>
             )}
 
