@@ -1591,51 +1591,39 @@ const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> 
 };
 
 const InfoPruebaTab: React.FC = () => {
-    const [seasons, setSeasons] = useState<ApiSeason[]>([]);
     const [riders, setRiders] = useState<ApiRider[]>([]);
-    const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState({ seasons: true, riders: false });
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [currentSeasonYear, setCurrentSeasonYear] = useState<number | null>(null);
+
 
     useEffect(() => {
-        const loadSeasons = async () => {
+        const loadCurrentSeasonAndRiders = async () => {
             try {
                 setError(null);
-                setIsLoading(prev => ({ ...prev, seasons: true }));
+                setIsLoading(true);
+
                 const fetchedSeasons = await fetchSeasons();
-                setSeasons(fetchedSeasons);
-                if (fetchedSeasons.length > 0) {
-                    const currentSeason = fetchedSeasons.find(s => s.current) || fetchedSeasons[0];
-                    setSelectedSeason(currentSeason.year);
+                const currentSeason = fetchedSeasons.find(s => s.current);
+
+                if (!currentSeason) {
+                    throw new Error('No se pudo determinar la temporada actual.');
                 }
-            } catch (err: any) {
-                setError(err.message || 'No se pudieron cargar las temporadas.');
-            } finally {
-                setIsLoading(prev => ({ ...prev, seasons: false }));
-            }
-        };
-        loadSeasons();
-    }, []);
-
-    useEffect(() => {
-        if (!selectedSeason) return;
-
-        const loadRiders = async () => {
-            try {
-                setError(null);
-                setIsLoading(prev => ({ ...prev, riders: true }));
-                setRiders([]); // Limpiar la lista de pilotos mientras se carga la nueva
-                const fetchedRiders = await fetchRidersBySeason(selectedSeason);
+                
+                setCurrentSeasonYear(currentSeason.year);
+                
+                const fetchedRiders = await fetchRidersBySeason(currentSeason.year);
                 setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
+
             } catch (err: any) {
-                setError(err.message || `No se pudieron cargar los pilotos para ${selectedSeason}.`);
+                setError(err.message || 'No se pudieron cargar los datos de la temporada.');
             } finally {
-                setIsLoading(prev => ({ ...prev, riders: false }));
+                setIsLoading(false);
             }
         };
-        loadRiders();
-    }, [selectedSeason]);
+        loadCurrentSeasonAndRiders();
+    }, []);
 
     if (selectedRiderId) {
         return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
@@ -1644,32 +1632,24 @@ const InfoPruebaTab: React.FC = () => {
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h2 className="font-orbitron text-2xl text-white">Información de Pilotos</h2>
-                {isLoading.seasons ? (
-                    <div className="h-10 bg-gray-700 rounded-md w-48 animate-pulse"></div>
-                ) : (
-                    <select
-                        value={selectedSeason || ''}
-                        onChange={(e) => setSelectedSeason(Number(e.target.value))}
-                        className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block w-full sm:w-auto p-2.5"
-                    >
-                        {seasons.map(season => (
-                            <option key={season.id} value={season.year}>Temporada {season.year}</option>
-                        ))}
-                    </select>
-                )}
+                <h2 className="font-orbitron text-2xl text-white">Parrilla Actual de MotoGP</h2>
+                 {currentSeasonYear && !isLoading && (
+                    <span className="bg-gray-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg">
+                        Temporada {currentSeasonYear}
+                    </span>
+                 )}
             </div>
 
-            {isLoading.riders && (
+            {isLoading && (
                 <div className="text-center py-8">
                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando pilotos de {selectedSeason}...</p>
+                    <p className="mt-4 text-gray-300">Cargando parrilla actual...</p>
                 </div>
             )}
 
             {error && <p className="text-center text-red-400 py-8">{error}</p>}
             
-            {!isLoading.riders && !error && (
+            {!isLoading && !error && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {riders.map(rider => (
                         <RiderCard key={rider.id} rider={rider} onSelect={() => setSelectedRiderId(rider.id)} />
@@ -1740,7 +1720,20 @@ const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ r
     if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
     if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
 
-    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, current_career_step } = rider;
+    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, career } = rider;
+    const current_career_step = career?.find(c => c.current);
+
+    if (!current_career_step) {
+        return (
+             <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+                 <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                    &larr; Volver a la lista
+                </button>
+                <p className="text-center text-yellow-400 py-8">No se encontró información de la temporada actual para este piloto ({name} {surname}).</p>
+             </div>
+        );
+    }
+
     const { team, pictures } = current_career_step;
 
     return (
