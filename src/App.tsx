@@ -1,8 +1,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
+<<<<<<< HEAD
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats } from './services/motogpApiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat } from './types';
+=======
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead } from './types';
+>>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -1127,7 +1132,11 @@ function VotarTab() {
     );
 }
 
+<<<<<<< HEAD
 function LiveTimingTab() {
+=======
+const LiveTimingTab: React.FC = () => {
+>>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const wakeLockSentinelRef = useRef<any>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1251,7 +1260,11 @@ function LiveTimingTab() {
     );
 }
 
+<<<<<<< HEAD
 function NewsTab() {
+=======
+const NewsTab: React.FC = () => {
+>>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
     const [articles, setArticles] = useState<Article[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -1989,6 +2002,7 @@ function CurrentSeasonChart({ results, riderSurname, riderName }: { results: Cir
         return () => resizeObserver.disconnect();
     }, []);
 
+<<<<<<< HEAD
     const chartData = useMemo(() => {
         if (!results || results.length === 0) return [];
         
@@ -2140,3 +2154,6 @@ function StatBoxWithBreakdown({ label, total, categories, isGold }: { label: str
             <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{label}</p>
             {breakdownText && (
                 <p className="text-[10px] text-gray-500 mt-2 font-mono">{breakdownText}</p>
+=======
+export default App;
+>>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
