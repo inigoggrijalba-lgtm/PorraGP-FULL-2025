@@ -1,5 +1,4 @@
-
-import type { CircuitResult, RaceResult, LiveTimingResponse, ApiSeason, ApiCategory, ApiRider } from '../types';
+import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider } from '../types';
 
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_BASE_URL = 'https://api.motogp.pulselive.com/motogp/v1';
@@ -89,13 +88,11 @@ export const fetchOfficialResults = async (): Promise<CircuitResult[]> => {
     }
 };
 
-export const fetchLiveTiming = async (): Promise<LiveTimingResponse> => {
-    // Se reintroduce el proxy para solucionar errores de CORS "Failed to fetch".
-    const liveTimingUrl = 'https://api.motogp.pulselive.com/motogp/v1/timing-gateway/livetiming-lite';
-    const url = `${PROXY_URL}${liveTimingUrl}`;
+export const fetchLiveTiming = async (): Promise<LiveTimingData> => {
+    const url = `${PROXY_URL}${encodeURIComponent('https://api.motogp.pulselive.com/motogp/v1/timing-gateway/livetiming-lite')}`;
     const response = await fetch(url);
     if (!response.ok) {
-        throw new Error(`Error al obtener los datos de Live Timing (código ${response.status}).`);
+        throw new Error('Error al obtener los datos de Live Timing.');
     }
     return response.json();
 };

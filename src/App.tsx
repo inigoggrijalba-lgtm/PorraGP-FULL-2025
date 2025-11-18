@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from './components/icons';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead } from './types';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
 
@@ -142,7 +142,6 @@ const parseCsvData = (csvText: string): MotoGpData => {
         }
     });
 
-    // fix: Corrected sorting property from 'totalPoints' to 'totalVotes'.
     driverVoteCounts.sort((a, b) => b.totalVotes - a.totalVotes);
 
     // --- Resultados Oficiales MotoGP ---
@@ -189,7 +188,7 @@ const parseCsvData = (csvText: string): MotoGpData => {
 };
 
 
-type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_pilotos';
+type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_prueba';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
@@ -200,7 +199,7 @@ const TABS: { name: string; tab: Tab }[] = [
     { name: "Votos pilotos", tab: "participantes" },
     { name: "Estadísticas", tab: "statistics" },
     { name: "Noticias", tab: "noticias" },
-    { name: "Info Pilotos", tab: "info_pilotos" },
+    { name: "Info Prueba", tab: "info_prueba" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -275,6 +274,10 @@ const App: React.FC = () => {
     }
 
     const renderContent = () => {
+        // Redirige a la pestaña de Live Timing si se solicita específicamente
+        if (activeTab === 'livetiming') {
+            return <LiveTimingTab />;
+        }
         if (isLoading) {
             return (
                 <div className="text-center">
@@ -305,20 +308,18 @@ const App: React.FC = () => {
                  return <MotoGpResultsTab data={motoGpData} />;
              case 'votar':
                 return <VotarTab />;
-            case 'livetiming':
-                return <LiveTimingTab />;
             case 'noticias':
                 return <NewsTab />;
-            case 'info_pilotos':
-                return <InfoPilotosTab />;
+            case 'info_prueba':
+                return <InfoPruebaTab />;
             default:
                 return null;
         }
     };
 
     return (
-        <div className="min-h-screen w-full p-4 sm:p-8 flex flex-col">
-            <header className="w-full max-w-7xl mx-auto flex justify-between items-center mb-8">
+        <div className={`min-h-screen w-full flex flex-col ${activeTab !== 'livetiming' ? 'p-4 sm:p-8' : ''}`}>
+            <header className={`w-full max-w-7xl mx-auto flex justify-between items-center mb-8 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                 <button 
                     onClick={() => handleSetTab('dashboard')} 
                     className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
@@ -329,10 +330,10 @@ const App: React.FC = () => {
                 <RefreshButton onClick={fetchData} isLoading={isLoading} />
             </header>
 
-            <main className="w-full max-w-7xl mx-auto flex-grow">
-                <div className="mb-8 border-b border-gray-700 flex justify-between items-center">
+            <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
+                <div className={`flex justify-between items-center ${activeTab === 'livetiming' ? 'px-4 sm:px-8 py-4' : 'mb-8 border-b border-gray-700'}`}>
                     {/* Mobile Menu Button & Dropdown */}
-                    <div className="sm:hidden relative">
+                    <div className={`sm:hidden relative ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                         <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
                              <MenuIcon className="w-6 h-6" />
                         </button>
@@ -363,7 +364,7 @@ const App: React.FC = () => {
                     </div>
 
                     {/* Desktop Tabs */}
-                    <nav className="hidden sm:flex -mb-px space-x-6 overflow-x-auto" aria-label="Tabs">
+                    <nav className={`hidden sm:flex -mb-px space-x-6 overflow-x-auto ${activeTab === 'livetiming' ? 'hidden' : ''}`} aria-label="Tabs">
                          {TABS.map(({ name, tab }) => (
                             <TabButton
                                 key={tab}
@@ -374,17 +375,26 @@ const App: React.FC = () => {
                             />
                         ))}
                     </nav>
-                     <button
-                        onClick={() => setActiveTab('livetiming')}
-                        className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
-                    >
-                        LiveTiming
-                    </button>
+                     {activeTab === 'livetiming' ? (
+                        <button
+                            onClick={() => handleSetTab('dashboard')}
+                            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap"
+                        >
+                            &larr; Volver
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setActiveTab('livetiming')}
+                            className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
+                        >
+                            LiveTiming
+                        </button>
+                    )}
                 </div>
                 {renderContent()}
             </main>
             
-            <footer className="w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0">
+            <footer className={`w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                  <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
             </footer>
 
@@ -665,12 +675,14 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                                     <th scope="col" className="px-2 py-3 text-center">Puntos</th>
                                     <th scope="col" className="px-2 py-3 text-center" title="Diferencia con el líder">Dif. 1º</th>
                                     <th scope="col" className="px-2 py-3 text-center" title="Diferencia con el siguiente">Dif. Sig.</th>
+                                    <th scope="col" className="px-2 py-3 text-center">Ult. Carr.</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.standings.map((player, index) => {
                                     const diffFromLeader = leaderPoints - player.totalPoints;
                                     const diffFromNext = index > 0 ? (data.standings[index - 1].totalPoints - player.totalPoints) : 0;
+                                    const lastRacePoints = currentRaceNumber > 0 ? player.pointsPerRace[currentRaceNumber - 1] || 0 : 0;
 
                                     return (
                                         <tr key={player.player} className="border-b border-gray-700 hover:bg-gray-800/50">
@@ -683,6 +695,7 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
                                             <td className="px-2 py-4 text-center motogp-red font-orbitron">{player.totalPoints}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromLeader}`}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromNext}`}</td>
+                                            <td className="px-2 py-4 text-center">{lastRacePoints}</td>
                                         </tr>
                                     );
                                 })}
@@ -1108,107 +1121,128 @@ const VotarTab: React.FC = () => {
 };
 
 const LiveTimingTab: React.FC = () => {
-    const [timingData, setTimingData] = useState<any | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [isFullScreen, setIsFullScreen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const fullscreenRef = useRef<HTMLDivElement>(null);
+    const wakeLockSentinelRef = useRef<any>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [head, setHead] = useState<LiveTimingHead | null>(null);
+    const liveTimingUrl = "https://script.google.com/macros/s/AKfycby2qhTo5C07UyquNIz8pmz4b4-7ZPn56DE_1gijH1Ze2irSWzsmXC9_f_seI9TXvekj/exec";
 
-    const fetchData = useCallback(async () => {
-        try {
-            // No establecemos isLoading a true en cada búsqueda para evitar parpadeos
-            const data = await fetchLiveTiming();
-            setTimingData(data);
-            setError(null);
-        } catch (err: any) {
-            setError(err.message || 'No se pudo cargar el Live Timing.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-        const intervalId = setInterval(fetchData, 10000); // Fetch every 10 seconds
-        return () => clearInterval(intervalId);
-    }, [fetchData]);
-
-    const handleFullScreen = () => {
-        if (!containerRef.current) return;
-        if (!document.fullscreenElement) {
-            containerRef.current.requestFullscreen().catch(err => {
-                alert(`Error al intentar activar el modo de pantalla completa: ${err.message} (${err.name})`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
+    const releaseWakeLock = useCallback(async () => {
+        if (wakeLockSentinelRef.current) {
+            try {
+                await wakeLockSentinelRef.current.release();
+                wakeLockSentinelRef.current = null;
+            } catch(e) {
+                console.error("Error releasing wake lock:", e);
             }
         }
-    };
+    }, []);
     
-    useEffect(() => {
-        const handleFullScreenChange = () => {
-            setIsFullScreen(!!document.fullscreenElement);
-        };
-        document.addEventListener('fullscreenchange', handleFullScreenChange);
-        return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    const handleFullscreenChange = useCallback(() => {
+        const isCurrentlyFullscreen = !!document.fullscreenElement;
+        setIsFullscreen(isCurrentlyFullscreen);
+        if (!isCurrentlyFullscreen) {
+            releaseWakeLock();
+        }
+    }, [releaseWakeLock]);
+
+    const toggleFullscreen = useCallback(async () => {
+        const element = fullscreenRef.current;
+        if (!element) return;
+
+        if (!document.fullscreenElement) {
+            try {
+                await element.requestFullscreen();
+                if ('wakeLock' in navigator && (navigator as any).wakeLock) {
+                    try {
+                        wakeLockSentinelRef.current = await (navigator as any).wakeLock.request('screen');
+                    } catch (err: any) {
+                        console.error(`No se pudo adquirir el Wake Lock: ${err.message}`);
+                    }
+                }
+            } catch (err: any) {
+                console.error(`Error al activar pantalla completa: ${err.message}`);
+            }
+        } else {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            }
+        }
     }, []);
 
-    // La API puede devolver un array vacío o un objeto con una propiedad 'riders'
-    const riders = timingData?.riders || (Array.isArray(timingData) ? timingData : []);
+    useEffect(() => {
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            releaseWakeLock();
+        };
+    }, [handleFullscreenChange, releaseWakeLock]);
+
+    useEffect(() => {
+        const loadHead = async () => {
+            try {
+                const data = await fetchLiveTiming();
+                setHead(data.head);
+            } catch (err) {
+                console.error("Failed to load live timing head", err);
+            }
+        };
+        loadHead();
+        const interval = setInterval(loadHead, 600000); // 10 minutes
+        return () => clearInterval(interval);
+    }, []);
 
     return (
-        <div ref={containerRef} className={`card-bg p-4 sm:p-6 rounded-xl shadow-lg transition-all duration-300 ${isFullScreen ? 'h-full w-full fixed inset-0 z-50 overflow-y-auto' : 'relative'}`}>
-             <div className="flex justify-between items-center mb-4">
-                <h2 className="font-orbitron text-2xl text-white">Live Timing</h2>
-                <div className='flex items-center gap-2'>
-                    {isLoading && <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-red-500"></div>}
-                    <button onClick={handleFullScreen} className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors" aria-label="Pantalla completa">
-                        {isFullScreen ? <ArrowsPointingInIcon className="w-5 h-5" /> : <ArrowsPointingOutIcon className="w-5 h-5" />}
-                    </button>
-                </div>
+        <div ref={fullscreenRef} className="flex flex-col flex-grow bg-gray-900 data-[fullscreen=true]:p-0 data-[fullscreen=true]:h-screen data-[fullscreen=true]:w-screen data-[fullscreen=true]:rounded-none" data-fullscreen={isFullscreen}>
+             <div className="flex justify-between items-center mb-4 data-[fullscreen=true]:p-4 data-[fullscreen=true]:bg-gray-900 data-[fullscreen=true]:absolute data-[fullscreen=true]:top-0 data-[fullscreen=true]:left-0 data-[fullscreen=true]:w-full data-[fullscreen=true]:z-10" data-fullscreen={isFullscreen}>
+                <h2 className="font-orbitron text-2xl text-white data-[fullscreen=true]:hidden" data-fullscreen={isFullscreen}>Live Timing</h2>
+                <div className="flex-grow data-[fullscreen=true]:block hidden" /> {/* Spacer */}
+                <button 
+                    onClick={toggleFullscreen} 
+                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
+                    aria-label={isFullscreen ? "Salir de pantalla completa" : "Poner en pantalla completa"}
+                >
+                    {isFullscreen ? (
+                        <>
+                            <FullscreenExitIcon className="w-5 h-5 mr-2" />
+                            Salir
+                        </>
+                    ) : (
+                        <>
+                            <FullscreenIcon className="w-5 h-5 mr-2" />
+                            Pantalla Completa
+                        </>
+                    )}
+                </button>
             </div>
-            
-            {error && <p className="text-center text-red-400 py-8">{error}</p>}
 
-            {!error && riders.length > 0 ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-300">
-                        <thead className="text-xs text-red-400 uppercase bg-gray-900/50">
-                            <tr>
-                                <th className="px-2 py-3 text-center">Pos</th>
-                                <th className="px-6 py-3">Piloto</th>
-                                <th className="px-2 py-3 text-center">Gap</th>
-                                <th className="px-2 py-3 text-center">Intervalo</th>
-                                <th className="px-2 py-3 text-center">Última Vuelta</th>
-                                <th className="px-2 py-3 text-center">Mejor Vuelta</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {riders.map((rider: any) => (
-                                <tr key={rider.number} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                    <td className="px-2 py-3 text-center font-bold">{rider.position}</td>
-                                    <td className="px-6 py-4 font-bold text-white flex items-center whitespace-nowrap">
-                                        <span className="w-1 h-4 mr-3 rounded-full" style={{ backgroundColor: getRiderColor(rider.name) }}></span>
-                                        <span className='mr-2 text-gray-400'>{rider.number}</span>
-                                        <span>{rider.name}</span>
-                                    </td>
-                                    <td className="px-2 py-3 text-center font-mono">{rider.gap}</td>
-                                    <td className="px-2 py-3 text-center font-mono">{rider.interval}</td>
-                                    <td className="px-2 py-3 text-center font-mono">{rider.last_lap}</td>
-                                    <td className="px-2 py-3 text-center font-mono text-violet-400">{rider.best_lap}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {/* Info Header from API - Hidden in fullscreen to maximize iframe space */}
+            {head && (
+                <div className="mb-4 bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 data-[fullscreen=true]:hidden" data-fullscreen={isFullscreen}>
+                    <div className="flex items-center gap-3">
+                        <div className={`px-3 py-1 rounded font-bold font-orbitron text-sm ${head.session_status_name === 'LIVE' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-600 text-gray-300'}`}>
+                            {head.session_status_name || 'OFFLINE'}
+                        </div>
+                        <div className="text-center sm:text-left">
+                            <h3 className="text-white font-bold text-lg">{head.circuit_name}</h3>
+                            <p className="text-gray-400 text-sm">{head.category} - {head.session_name}</p>
+                        </div>
+                    </div>
                 </div>
-            ) : (
-                !isLoading && !error && <p className="text-center text-gray-400 py-8">No hay sesión activa o datos disponibles en este momento.</p>
             )}
+
+            <iframe
+                src={liveTimingUrl}
+                className="w-full flex-grow border-0 data-[fullscreen=true]:pt-16"
+                data-fullscreen={isFullscreen}
+                title="Live Timing Script"
+                allowFullScreen
+            >
+                Cargando Live Timing...
+            </iframe>
         </div>
     );
 };
-
 
 const NewsTab: React.FC = () => {
     const [articles, setArticles] = useState<Article[]>([]);
@@ -1289,7 +1323,6 @@ const NewsTab: React.FC = () => {
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex items-center mb-6">
-                <NewspaperIcon className="w-8 h-8 motogp-red mr-3"/>
                 <h2 className="font-orbitron text-3xl text-white">Últimas Noticias</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1674,7 +1707,7 @@ const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> 
     );
 };
 
-const InfoPilotosTab: React.FC = () => {
+const InfoPruebaTab: React.FC = () => {
     const [riders, setRiders] = useState<ApiRider[]>([]);
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -1682,7 +1715,7 @@ const InfoPilotosTab: React.FC = () => {
     const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2025);
 
     useEffect(() => {
-        const loadRiders = async () => {
+        const loadRidersForSeason = async () => {
             try {
                 setError(null);
                 setIsLoading(true);
@@ -1690,65 +1723,54 @@ const InfoPilotosTab: React.FC = () => {
                 setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
             } catch (err: any) {
                 setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
-                setRiders([]); // Limpiar pilotos en caso de error
             } finally {
                 setIsLoading(false);
             }
         };
-        loadRiders();
+        loadRidersForSeason();
     }, [selectedSeasonYear]);
 
     if (selectedRiderId) {
         return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
     }
 
-    const seasonYears = [2025, 2026];
-
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h2 className="font-orbitron text-2xl text-white">Parrilla de MotoGP</h2>
-                <div className="flex items-center gap-2 bg-gray-800 p-1 rounded-lg">
-                    {seasonYears.map(year => (
-                        <button
-                            key={year}
-                            onClick={() => setSelectedSeasonYear(year)}
-                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${
-                                selectedSeasonYear === year
-                                ? 'motogp-red-bg text-white shadow'
-                                : 'text-gray-300 hover:bg-gray-700'
-                            }`}
-                        >
-                            {year}
-                        </button>
-                    ))}
-                </div>
+                <select
+                    value={selectedSeasonYear}
+                    onChange={(e) => {
+                        setIsLoading(true);
+                        setSelectedSeasonYear(Number(e.target.value));
+                    }}
+                    className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none"
+                    aria-label="Seleccionar temporada"
+                >
+                    <option value="2025">Temporada 2025</option>
+                    <option value="2026">Temporada 2026</option>
+                </select>
             </div>
 
             {isLoading && (
                 <div className="text-center py-8">
                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla {selectedSeasonYear}...</p>
+                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedSeasonYear}...</p>
                 </div>
             )}
 
             {error && <p className="text-center text-red-400 py-8">{error}</p>}
             
-            {!isLoading && !error && riders.length > 0 && (
+            {!isLoading && !error && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {riders.map(rider => (
                         <RiderCard key={rider.id} rider={rider} onSelect={() => setSelectedRiderId(rider.id)} />
                     ))}
                 </div>
             )}
-
-            {!isLoading && !error && riders.length === 0 && (
-                 <p className="text-center text-gray-400 py-8">No se encontraron pilotos para la temporada {selectedSeasonYear}.</p>
-            )}
         </div>
     );
 };
-
 
 const RiderCard: React.FC<{ rider: ApiRider; onSelect: () => void; }> = ({ rider, onSelect }) => {
     const profilePic = rider.current_career_step?.pictures?.profile?.main;
@@ -1810,7 +1832,8 @@ const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ r
     if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
     if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
 
-    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, current_career_step } = rider;
+    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, career } = rider;
+    const current_career_step = career?.find(c => c.current);
 
     if (!current_career_step) {
         return (
@@ -1888,6 +1911,5 @@ const InfoItem: React.FC<{ label: string, value: string | number }> = ({ label, 
         <span className="font-bold text-white text-right">{value}</span>
     </div>
 );
-
 
 export default App;

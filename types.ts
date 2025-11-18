@@ -2,9 +2,9 @@
 // This resolves errors related to 'import.meta.env' and the inability to find 'vite/client' type definitions.
 declare global {
   interface ImportMetaEnv {
-    readonly BUILD_TIMESTAMP?: string;
+    readonly BUILD_TIMESTAMP: string;
     // fix: Add BASE_URL to fix TypeScript error in App.tsx
-    readonly BASE_URL?: string;
+    readonly BASE_URL: string;
   }
   interface ImportMeta {
     readonly env: ImportMetaEnv;
@@ -68,8 +68,45 @@ export interface Article {
   pubDate: string;
 }
 
-// fix: Define LiveTimingResponse to resolve import error in motogpApiService.ts
-export type LiveTimingResponse = Record<string, any>;
+// --- MotoGP Live Timing API Types ---
+export interface LiveTimingHead {
+    championship_id: string;
+    category: string;
+    circuit_id: string;
+    circuit_name: string;
+    event_id: string;
+    session_id: string;
+    session_name: string;
+    remaining: string;
+    session_status_name: string;
+    date_formated: string;
+}
+
+export interface LiveTimingRider {
+    order: number;
+    rider_id: number;
+    status_name: string;
+    rider_number: string;
+    pos: number;
+    rider_shortname: string;
+    rider_name: string;
+    rider_surname: string;
+    lap_time: string;
+    num_lap: number;
+    last_lap_time: string;
+    team_name: string;
+    bike_name: string;
+    gap_first: string;
+    gap_prev: string;
+    on_pit: boolean;
+    color: string;
+    text_color: string;
+}
+
+export interface LiveTimingData {
+  head: LiveTimingHead;
+  rider: Record<string, LiveTimingRider>;
+}
 
 // --- MotoGP API Types for InfoPruebaTab ---
 export interface ApiSeason {
@@ -129,6 +166,7 @@ export interface ApiRider {
         number: number;
         sponsored_team: string;
         category: { name: string };
+        current: boolean;
     }[];
     published: boolean;
 }
