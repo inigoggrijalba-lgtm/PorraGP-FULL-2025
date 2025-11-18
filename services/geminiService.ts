@@ -1,13 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import type { MotoGpData, ChatMessage } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const chatWithData = async (data: MotoGpData, rawCsv: string, history: ChatMessage[], query: string): Promise<string> => {
+    // La inicialización y la comprobación de la clave se mueven aquí para evitar que se ejecuten al cargar el módulo.
+    if (!process.env.API_KEY) {
+      throw new Error("La clave API de Gemini no está configurada. La función de chat está deshabilitada.");
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     // Enviamos tanto los datos estructurados como los brutos. El LLM puede usar los datos estructurados para preguntas fáciles
     // y los datos brutos para preguntas sobre partes que no hemos procesado (como los resultados oficiales de MotoGP).
 

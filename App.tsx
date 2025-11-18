@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingData, LiveTimingRider } from './types';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -202,7 +203,7 @@ const TABS: { name: string; tab: Tab }[] = [
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
-const RefreshButton: React.FC<{ onClick: () => void; isLoading: boolean }> = ({ onClick, isLoading }) => {
+function RefreshButton({ onClick, isLoading }: { onClick: () => void; isLoading: boolean }) {
     return (
         <button
             onClick={onClick}
@@ -214,9 +215,9 @@ const RefreshButton: React.FC<{ onClick: () => void; isLoading: boolean }> = ({ 
             <span className="hidden sm:inline">{isLoading ? '...' : 'Actualizar'}</span>
         </button>
     );
-};
+}
 
-const App: React.FC = () => {
+function App() {
     const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
@@ -310,15 +311,15 @@ const App: React.FC = () => {
             case 'noticias':
                 return <NewsTab />;
             case 'info_prueba':
-                return <InfoPruebaTab />;
+                return <InfoPruebaTab data={motoGpData} />;
             default:
                 return null;
         }
     };
 
     return (
-        <div className="min-h-screen w-full p-4 sm:p-8 flex flex-col">
-            <header className="w-full max-w-7xl mx-auto flex justify-between items-center mb-8">
+        <div className={`min-h-screen w-full flex flex-col ${activeTab !== 'livetiming' ? 'p-4 sm:p-8' : ''}`}>
+            <header className={`w-full max-w-7xl mx-auto flex justify-between items-center mb-8 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                 <button 
                     onClick={() => handleSetTab('dashboard')} 
                     className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
@@ -329,10 +330,10 @@ const App: React.FC = () => {
                 <RefreshButton onClick={fetchData} isLoading={isLoading} />
             </header>
 
-            <main className="w-full max-w-7xl mx-auto flex-grow">
-                <div className="mb-8 border-b border-gray-700 flex justify-between items-center">
+            <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
+                <div className={`flex justify-between items-center ${activeTab === 'livetiming' ? 'px-4 sm:px-8 py-4' : 'mb-8 border-b border-gray-700'}`}>
                     {/* Mobile Menu Button & Dropdown */}
-                    <div className="sm:hidden relative">
+                    <div className={`sm:hidden relative ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                         <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
                              <MenuIcon className="w-6 h-6" />
                         </button>
@@ -363,7 +364,7 @@ const App: React.FC = () => {
                     </div>
 
                     {/* Desktop Tabs */}
-                    <nav className="hidden sm:flex -mb-px space-x-6 overflow-x-auto" aria-label="Tabs">
+                    <nav className={`hidden sm:flex -mb-px space-x-6 overflow-x-auto ${activeTab === 'livetiming' ? 'hidden' : ''}`} aria-label="Tabs">
                          {TABS.map(({ name, tab }) => (
                             <TabButton
                                 key={tab}
@@ -374,17 +375,26 @@ const App: React.FC = () => {
                             />
                         ))}
                     </nav>
-                     <button
-                        onClick={() => setActiveTab('livetiming')}
-                        className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
-                    >
-                        LiveTiming
-                    </button>
+                     {activeTab === 'livetiming' ? (
+                        <button
+                            onClick={() => handleSetTab('dashboard')}
+                            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap"
+                        >
+                            &larr; Volver
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setActiveTab('livetiming')}
+                            className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
+                        >
+                            LiveTiming
+                        </button>
+                    )}
                 </div>
                 {renderContent()}
             </main>
             
-            <footer className="w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0">
+            <footer className={`w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
                  <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
             </footer>
 
@@ -398,9 +408,16 @@ const App: React.FC = () => {
             )}
         </div>
     );
-};
+}
 
-const TabButton: React.FC<{name: string, tab: Tab, activeTab: Tab, setActiveTab: (tab: Tab) => void}> = ({ name, tab, activeTab, setActiveTab}) => {
+interface TabButtonProps {
+    name: string;
+    tab: Tab;
+    activeTab: Tab;
+    setActiveTab: (tab: Tab) => void;
+}
+
+const TabButton: React.FC<TabButtonProps> = ({ name, tab, activeTab, setActiveTab}) => {
     return (
         <button
             onClick={() => setActiveTab(tab)}
@@ -417,7 +434,7 @@ const TabButton: React.FC<{name: string, tab: Tab, activeTab: Tab, setActiveTab:
 
 // --- TABS ---
 
-const InstallAppCard: React.FC<{ onOpenModal: (os: 'android' | 'ios') => void }> = ({ onOpenModal }) => {
+function InstallAppCard({ onOpenModal }: { onOpenModal: (os: 'android' | 'ios') => void }) {
     return (
         <div className="mt-8">
             <div 
@@ -441,9 +458,9 @@ const InstallAppCard: React.FC<{ onOpenModal: (os: 'android' | 'ios') => void }>
             </div>
         </div>
     );
-};
+}
 
-const InstallInstructionsModal: React.FC<{ os: 'android' | 'ios'; onClose: () => void; }> = ({ os, onClose }) => {
+function InstallInstructionsModal({ os, onClose }: { os: 'android' | 'ios'; onClose: () => void; }) {
     const isAndroid = os === 'android';
     const title = isAndroid ? 'Instalar en Android' : 'Instalar en iPhone/iPad';
     const icon = isAndroid ? <AndroidIcon className="w-10 h-10 text-green-400" /> : <AppleIcon className="w-10 h-10 text-blue-400" />;
@@ -483,10 +500,10 @@ const InstallInstructionsModal: React.FC<{ os: 'android' | 'ios'; onClose: () =>
             </div>
         </div>
     );
-};
+}
 
 
-const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => void }> = ({ data, setActiveTab }) => {
+function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: (tab: Tab) => void }) {
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
     const [installModalOS, setInstallModalOS] = useState<'android' | 'ios' | null>(null);
 
@@ -599,10 +616,10 @@ const DashboardTab: React.FC<{ data: MotoGpData, setActiveTab: (tab: Tab) => voi
             )}
         </>
     );
-};
+}
 
 
-const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+function StandingsTab({ data }: { data: MotoGpData }) {
     const tableRef = useRef<HTMLDivElement>(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -717,9 +734,9 @@ const StandingsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
             )}
         </>
     );
-};
+}
 
-const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+function StatisticsTab({ data }: { data: MotoGpData }) {
     const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
 
     const playerColors = useMemo(() => {
@@ -769,13 +786,13 @@ const StatisticsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
 
         </div>
     );
-};
+}
 
-const EvolutionChart: React.FC<{
+function EvolutionChart({ data, selectedPlayers, playerColors }: {
     data: MotoGpData;
     selectedPlayers: string[];
     playerColors: Map<string, string>;
-}> = ({ data, selectedPlayers, playerColors }) => {
+}) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -890,10 +907,10 @@ const EvolutionChart: React.FC<{
             )}
         </div>
     );
-};
+}
 
 
-const CircuitsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+function CircuitsTab({ data }: { data: MotoGpData }) {
     const [selectedCircuitIndex, setSelectedCircuitIndex] = useState(0);
     
     if (!data.races || data.races.length === 0) {
@@ -967,9 +984,9 @@ const CircuitsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
             </div>
         </div>
     );
-};
+}
 
-const ParticipantesTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+function ParticipantesTab({ data }: { data: MotoGpData }) {
     const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(0);
     const players = useMemo(() => data.standings.map(p => p.player).sort((a, b) => a.localeCompare(b)), [data.standings]);
     const selectedPlayer = players[selectedPlayerIndex];
@@ -1030,7 +1047,7 @@ const ParticipantesTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
     );
 }
 
-const MotoGpResultsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
+function MotoGpResultsTab({ data }: { data: MotoGpData }) {
     const [selectedCircuitIndex, setSelectedCircuitIndex] = useState(0);
 
     const circuitResults = data.motogpResults[selectedCircuitIndex];
@@ -1085,9 +1102,9 @@ const MotoGpResultsTab: React.FC<{ data: MotoGpData }> = ({ data }) => {
             </div>
         </div>
     );
-};
+}
 
-const VotarTab: React.FC = () => {
+function VotarTab() {
     const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSehFnSvXp_Wp0zEPodbrzTdBTiX7cdwQkhJZsTEimwLMVPzdw/viewform?embedded=true";
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
@@ -1108,59 +1125,55 @@ const VotarTab: React.FC = () => {
             </div>
         </div>
     );
-};
+}
 
-const LiveTimingTab: React.FC = () => {
-    const [liveData, setLiveData] = useState<LiveTimingData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [previousRiders, setPreviousRiders] = useState<Map<number, LiveTimingRider>>(new Map());
+function LiveTimingTab() {
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const wakeLockSentinelRef = useRef<any>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
-
-    const fetchData = useCallback(async () => {
-        if (!liveData) setIsLoading(true);
-        setError(null);
-
-        try {
-            const data = await fetchLiveTiming();
-            if (liveData) {
-                const prevMap = new Map<number, LiveTimingRider>();
-                (Object.values(liveData.rider) as LiveTimingRider[]).forEach(r => prevMap.set(r.rider_id, r));
-                setPreviousRiders(prevMap);
-            }
-            setLiveData(data);
-        } catch (err: any) {
-            setError(err.message || 'No se pudo cargar el Live Timing.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [liveData]);
-
-    const handleFullscreenChange = useCallback(() => {
-        setIsFullscreen(!!document.fullscreenElement);
-    }, []);
+    const [head, setHead] = useState<LiveTimingHead | null>(null);
+    const liveTimingUrl = "https://script.google.com/macros/s/AKfycby2qhTo5C07UyquNIz8pmz4b4-7ZPn56DE_1gijH1Ze2irSWzsmXC9_f_seI9TXvekj/exec";
 
     const releaseWakeLock = useCallback(async () => {
         if (wakeLockSentinelRef.current) {
-            await wakeLockSentinelRef.current.release();
-            wakeLockSentinelRef.current = null;
+            try {
+                await wakeLockSentinelRef.current.release();
+                wakeLockSentinelRef.current = null;
+            } catch(e) {
+                console.error("Error releasing wake lock:", e);
+            }
         }
     }, []);
+    
+    const handleFullscreenChange = useCallback(() => {
+        const isCurrentlyFullscreen = !!document.fullscreenElement;
+        setIsFullscreen(isCurrentlyFullscreen);
+        if (!isCurrentlyFullscreen) {
+            releaseWakeLock();
+        }
+    }, [releaseWakeLock]);
 
     const toggleFullscreen = useCallback(async () => {
+        const element = fullscreenRef.current;
+        if (!element) return;
+
         if (!document.fullscreenElement) {
             try {
-                await fullscreenRef.current?.requestFullscreen();
-                if ('wakeLock' in navigator) {
-                    wakeLockSentinelRef.current = await navigator.wakeLock.request('screen');
+                await element.requestFullscreen();
+                if ('wakeLock' in navigator && (navigator as any).wakeLock) {
+                    try {
+                        wakeLockSentinelRef.current = await (navigator as any).wakeLock.request('screen');
+                    } catch (err: any) {
+                        console.error(`No se pudo adquirir el Wake Lock: ${err.message}`);
+                    }
                 }
             } catch (err: any) {
                 console.error(`Error al activar pantalla completa: ${err.message}`);
             }
         } else {
-            await document.exitFullscreen();
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            }
         }
     }, []);
 
@@ -1173,159 +1186,72 @@ const LiveTimingTab: React.FC = () => {
     }, [handleFullscreenChange, releaseWakeLock]);
 
     useEffect(() => {
-        if (!isFullscreen) {
-            releaseWakeLock();
-        }
-    }, [isFullscreen, releaseWakeLock]);
-
-    useEffect(() => {
-        fetchData();
-        const intervalId = setInterval(fetchData, 5000);
-        return () => clearInterval(intervalId);
-    }, [fetchData]);
-
-    const formatTime = (secondsStr: string) => {
-        const totalSeconds = parseInt(secondsStr, 10);
-        if (isNaN(totalSeconds) || totalSeconds < 0) return '00:00:00';
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        if (hours > 0) {
-            return `${String(hours)}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    };
-
-    const getStatusColorClass = (status: string) => {
-        switch (status) {
-            case 'S': return 'bg-green-500'; // Session Started
-            case 'F': return 'bg-white';     // Session Finished
-            case 'R': return 'bg-red-500';     // Red Flag
-            case 'N':                         // Not started / Interrupted
-            default: return 'bg-gray-500';
-        }
-    };
-    
-    if (isLoading) {
-        return (
-            <div className="text-center">
-                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                <p className="mt-4 text-lg text-gray-300">Conectando al Live Timing...</p>
-            </div>
-        );
-    }
-
-    if (error) {
-        return <p className="text-center text-red-400">{error}</p>;
-    }
-
-    if (!liveData) {
-        return <p className="text-center text-gray-400">No hay datos de Live Timing disponibles.</p>;
-    }
-
-    const sortedRiders = (Object.values(liveData.rider) as LiveTimingRider[]).sort((a, b) => a.order - b.order);
-    const ROW_HEIGHT_PX = 40;
-    const containerHeight = sortedRiders.length * ROW_HEIGHT_PX;
+        const loadHead = async () => {
+            try {
+                const data = await fetchLiveTiming();
+                setHead(data.head);
+            } catch (err) {
+                console.error("Failed to load live timing head", err);
+            }
+        };
+        loadHead();
+        const interval = setInterval(loadHead, 600000); // 10 minutes
+        return () => clearInterval(interval);
+    }, []);
 
     return (
-        <div ref={fullscreenRef} className="card-bg rounded-xl shadow-lg overflow-hidden data-[fullscreen=true]:bg-gray-900" data-fullscreen={isFullscreen}>
-            <header className="p-4 bg-gray-900/50 flex justify-between items-center text-white">
-                <div className="flex items-center gap-4">
-                    <div>
-                        <h2 className="font-orbitron font-bold text-xl">{liveData.head.category} <span className="text-gray-400">{liveData.head.session_name}</span></h2>
-                        <p className="text-xs text-gray-400">{liveData.head.circuit_name}</p>
-                    </div>
-                </div>
-                 <div className="flex items-center gap-4">
-                    <div className="text-right">
-                        <div className="flex items-center justify-end gap-3">
-                            <span className={`w-4 h-4 rounded-full animate-pulse ${getStatusColorClass(liveData.head.session_status_name)}`} title={`Estado de la sesión: ${liveData.head.session_status_name}`}></span>
-                            <p className="font-orbitron font-bold text-2xl">{formatTime(liveData.head.remaining)}</p>
+        <div ref={fullscreenRef} className="flex flex-col flex-grow bg-gray-900 data-[fullscreen=true]:p-0 data-[fullscreen=true]:h-screen data-[fullscreen=true]:w-screen data-[fullscreen=true]:rounded-none" data-fullscreen={isFullscreen}>
+             <div className="flex justify-between items-center mb-4 data-[fullscreen=true]:p-4 data-[fullscreen=true]:bg-gray-900 data-[fullscreen=true]:absolute data-[fullscreen=true]:top-0 data-[fullscreen=true]:left-0 data-[fullscreen=true]:w-full data-[fullscreen=true]:z-10" data-fullscreen={isFullscreen}>
+                <h2 className="font-orbitron text-2xl text-white data-[fullscreen=true]:hidden" data-fullscreen={isFullscreen}>Live Timing</h2>
+                <div className="flex-grow data-[fullscreen=true]:block hidden" /> {/* Spacer */}
+                <button 
+                    onClick={toggleFullscreen} 
+                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
+                    aria-label={isFullscreen ? "Salir de pantalla completa" : "Poner en pantalla completa"}
+                >
+                    {isFullscreen ? (
+                        <>
+                            <FullscreenExitIcon className="w-5 h-5 mr-2" />
+                            Salir
+                        </>
+                    ) : (
+                        <>
+                            <FullscreenIcon className="w-5 h-5 mr-2" />
+                            Pantalla Completa
+                        </>
+                    )}
+                </button>
+            </div>
+
+            {/* Info Header from API - Hidden in fullscreen to maximize iframe space */}
+            {head && (
+                <div className="mb-4 bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4 data-[fullscreen=true]:hidden" data-fullscreen={isFullscreen}>
+                    <div className="flex items-center gap-3">
+                        <div className={`px-3 py-1 rounded font-bold font-orbitron text-sm ${head.session_status_name === 'LIVE' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-600 text-gray-300'}`}>
+                            {head.session_status_name || 'OFFLINE'}
                         </div>
-                        <p className="text-xs text-gray-400">{liveData.head.date_formated}</p>
-                    </div>
-                    <button onClick={toggleFullscreen} className="p-2 text-gray-300 hover:text-white transition-colors" aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Entrar en pantalla completa'}>
-                        {isFullscreen ? <FullscreenExitIcon className="w-6 h-6" /> : <FullscreenIcon className="w-6 h-6" />}
-                    </button>
-                 </div>
-            </header>
-            <div className="overflow-x-auto">
-                <div className="w-full text-sm text-left text-gray-300 min-w-[1120px]">
-                    {/* Header Row using Flexbox */}
-                    <div className="text-xs text-gray-400 uppercase bg-gray-800/50 sticky top-0 z-10 flex">
-                        <div className="w-12 shrink-0 text-center px-2 py-3 font-normal">P</div>
-                        <div className="w-48 px-2 py-3 font-normal min-w-0">Rider</div>
-                        <div className="w-16 shrink-0 text-center px-2 py-3 font-normal">#</div>
-                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Best Lap</div>
-                        <div className="w-16 shrink-0 text-center px-2 py-3 font-normal">Lap</div>
-                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Last Lap</div>
-                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Gap P.</div>
-                        <div className="w-24 shrink-0 text-right px-2 py-3 font-normal">Gap F.</div>
-                        <div className="w-64 shrink-0 px-2 py-3 font-normal">Team</div>
-                        <div className="w-28 shrink-0 px-2 py-3 font-normal">Bike</div>
-                    </div>
-                    {/* Body container */}
-                    <div className="relative" style={{ height: `${containerHeight}px` }}>
-                        {sortedRiders.map((rider) => (
-                           <LiveTimingRow
-                                key={rider.rider_id}
-                                rider={rider}
-                                prevRider={previousRiders.get(rider.rider_id)}
-                                rowHeight={ROW_HEIGHT_PX}
-                           />
-                        ))}
+                        <div className="text-center sm:text-left">
+                            <h3 className="text-white font-bold text-lg">{head.circuit_name}</h3>
+                            <p className="text-gray-400 text-sm">{head.category} - {head.session_name}</p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
+
+            <iframe
+                src={liveTimingUrl}
+                className="w-full flex-grow border-0 data-[fullscreen=true]:pt-16"
+                data-fullscreen={isFullscreen}
+                title="Live Timing Script"
+                allowFullScreen
+            >
+                Cargando Live Timing...
+            </iframe>
         </div>
     );
-};
+}
 
-const LiveTimingRow: React.FC<{rider: LiveTimingRider, prevRider?: LiveTimingRider, rowHeight: number}> = ({ rider, prevRider, rowHeight }) => {
-    const [highlight, setHighlight] = useState(false);
-
-    useEffect(() => {
-        if (prevRider && rider.order < prevRider.order) {
-            setHighlight(true);
-            const timer = setTimeout(() => setHighlight(false), 2500);
-            return () => clearTimeout(timer);
-        }
-    }, [rider.order, prevRider]);
-
-    const rowClasses = `live-timing-row flex items-center border-b border-gray-700/50 ${highlight ? 'highlight-red' : ''}`;
-    const rowStyle: React.CSSProperties = {
-        transform: `translateY(${(rider.order - 1) * rowHeight}px)`,
-        height: `${rowHeight}px`,
-    };
-    
-    return (
-        <div className={rowClasses} style={rowStyle}>
-            <div className="w-12 shrink-0 text-center px-2 font-bold">{rider.status_name}</div>
-            <div className="w-48 px-2 font-bold text-white whitespace-nowrap min-w-0 truncate" title={`${rider.rider_name} ${rider.rider_surname}`}>{rider.rider_name} {rider.rider_surname}</div>
-            <div className="w-16 shrink-0 text-center px-2">
-                 <div className="flex items-center justify-center gap-1">
-                    {rider.on_pit && <span className="text-xs bg-gray-500 text-white px-1 rounded-sm font-sans">PIT</span>}
-                    <span 
-                        className="w-7 h-5 flex items-center justify-center rounded-sm font-bold font-sans"
-                        style={{ backgroundColor: rider.color, color: rider.text_color }}
-                    >
-                        {rider.rider_number}
-                    </span>
-                 </div>
-            </div>
-            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.lap_time}</div>
-            <div className="w-16 shrink-0 text-center px-2 font-mono">{rider.num_lap}</div>
-            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.last_lap_time}</div>
-            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.gap_prev}</div>
-            <div className="w-24 shrink-0 text-right px-2 font-mono">{rider.gap_first}</div>
-            <div className="w-64 shrink-0 px-2 text-gray-400 whitespace-nowrap min-w-0 truncate" title={rider.team_name}>{rider.team_name}</div>
-            <div className="w-28 shrink-0 px-2 text-gray-400">{rider.bike_name}</div>
-        </div>
-    );
-};
-
-
-const NewsTab: React.FC = () => {
+function NewsTab() {
     const [articles, setArticles] = useState<Article[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -1453,268 +1379,9 @@ const NewsTab: React.FC = () => {
 
         </div>
     );
-};
-
-// --- Sub-components ---
-
-const VotesChart: React.FC<{ data: { driver: string; count: number }[] }> = ({ data }) => {
-    const maxScaleValue = useMemo(() => {
-        if (data.length === 0) return 4;
-        const max = Math.max(...data.map(d => d.count));
-        return max < 4 ? 4 : Math.ceil(max / 2) * 2; // Ceil to next even number for better scale
-    }, [data]);
-
-    if (data.length === 0) {
-        return <p className="text-gray-400 text-center py-8">No hay datos de pilotos disponibles.</p>;
-    }
-
-    return (
-        <div className="w-full">
-            <div className="relative" style={{ paddingLeft: '100px' }}> {/* Left padding for labels */}
-                {/* Bars and Labels */}
-                <div className="space-y-4">
-                    {data.map(({ driver, count }) => (
-                        <div key={driver} className="flex items-center h-6 relative">
-                            <span 
-                                className="absolute text-right text-xs sm:text-sm text-gray-300 w-24 pr-2 truncate"
-                                style={{ left: '-100px', top: '50%', transform: 'translateY(-50%)' }}
-                                title={driver}
-                            >
-                                {driver}
-                            </span>
-                            <div 
-                                className="h-full rounded-sm"
-                                style={{
-                                    width: `${(count / maxScaleValue) * 100}%`,
-                                    backgroundColor: getRiderColor(driver),
-                                    transition: 'width 0.5s ease-in-out',
-                                }}
-                            ></div>
-                             {count > 0 && (
-                                <span className="ml-2 text-xs font-bold" style={{color: getRiderColor(driver)}}>
-                                    {count}
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
-                {/* Grid Lines - overlayed */}
-                 <div className="absolute top-0 left-0 w-full h-full flex justify-between pointer-events-none">
-                    {[...Array(maxScaleValue + 1)].map((_, i) => (
-                        <div key={i} className={`h-full ${i === 0 ? 'border-l' : ''} ${i < maxScaleValue ? 'border-r' : ''} border-gray-700 border-dashed`} style={{width: `${100/maxScaleValue}%`}}></div>
-                    ))}
-                </div>
-            </div>
-
-             {/* X-Axis */}
-            <div className="flex justify-between" style={{ paddingLeft: '100px' }}>
-                {[...Array(maxScaleValue + 1)].map((_, i) => (
-                    <span key={i} className="text-xs text-gray-500 -translate-x-1/2">{i}</span>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const PlayerVoteCard: React.FC<{player: string, vote: string, onClick: () => void}> = ({ player, vote, onClick }) => {
-    const hasVoted = vote !== '-';
-    const riderColor = hasVoted ? getRiderColor(vote) : 'transparent';
-
-    return (
-        <button 
-            onClick={onClick}
-            className="card-bg p-4 rounded-lg shadow-md hover:bg-gray-800/60 hover:shadow-red-900/50 transition-all duration-300 transform hover:-translate-y-1 flex items-center space-x-3 text-left w-full border-l-4"
-            style={{ borderColor: riderColor }}
-        >
-            <div className="flex-shrink-0 bg-gray-700/50 rounded-full p-2 text-red-500">
-                <UserIcon className="w-6 h-6"/>
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="font-bold text-white font-orbitron text-md truncate">{player}</p>
-                {hasVoted ? (
-                    <p className="text-sm text-gray-200 truncate">{vote}</p>
-                ) : (
-                    <p className="text-sm text-gray-500 italic">Aún no ha votado</p>
-                )}
-            </div>
-        </button>
-    )
 }
 
-const PlayerVoteDetailsModal: React.FC<{player: string; data: MotoGpData; onClose: () => void;}> = ({ player, data, onClose }) => {
-    const playerVoteStats = useMemo(() => {
-        const votes = data.driverVoteCounts.map(driverCount => ({
-            driver: driverCount.driver,
-            count: driverCount.votesByPlayer[player] || 0,
-        })).sort((a, b) => b.count - a.count);
-        return votes;
-    }, [player, data.driverVoteCounts]);
-
-    return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4" onClick={onClose}>
-            <div className="card-bg rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="font-orbitron text-lg text-white">Votos de <span className="motogp-red">{player}</span></h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                </header>
-                <div className="flex-1 p-4 overflow-y-auto">
-                    <table className="w-full text-sm text-left text-gray-300">
-                        <thead className="text-xs text-red-400 uppercase bg-gray-900/50 sticky top-0">
-                            <tr>
-                                <th className="px-6 py-3">Piloto</th>
-                                <th className="px-6 py-3 text-center">Nº de Votos</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {playerVoteStats.map(({driver, count}) => {
-                                const riderColor = getRiderColor(driver);
-                                return (
-                                <tr key={driver} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                    <td className="px-6 py-3 font-medium text-white flex items-center">
-                                         <span 
-                                            className="w-3 h-3 rounded-full mr-3 flex-shrink-0" 
-                                            style={{ backgroundColor: riderColor }}
-                                        ></span>
-                                        {driver}
-                                    </td>
-                                    <td className="px-6 py-3 text-center font-orbitron">{count}</td>
-                                </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const ResultsTable: React.FC<{ results?: RaceResult[] }> = ({ results }) => {
-    if (!results || results.length === 0) {
-        return <p className="text-gray-400">No hay resultados disponibles para esta carrera.</p>;
-    }
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-300">
-                <thead className="text-xs text-red-400 uppercase bg-gray-900/50">
-                    <tr>
-                        <th className="px-3 py-3 text-center w-16">Pos</th>
-                        <th className="px-6 py-3">Piloto</th>
-                        <th className="px-6 py-3 text-right">Puntos</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {results.map(res => (
-                        <tr key={res.position} className="border-b border-gray-700 hover:bg-gray-800/50">
-                            <td className="px-3 py-4 text-center font-bold">{res.position}</td>
-                            <td className="px-6 py-4 font-medium text-white">{res.driver}</td>
-                            <td className="px-6 py-4 text-right font-orbitron">{res.points}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    )
-}
-
-const StatCard: React.FC<{title: string; value: string; metric: string; icon: React.ReactNode;}> = ({ title, value, metric, icon }) => (
-    <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600">
-        <div className="p-2 sm:p-3 bg-gray-700/50 rounded-lg text-red-500">
-            {icon}
-        </div>
-        <div>
-            <p className="text-sm text-gray-400">{title}</p>
-            <p className="text-xl sm:text-2xl font-bold text-white font-orbitron">{value}</p>
-            <p className="text-xs sm:text-sm motogp-red">{metric}</p>
-        </div>
-    </div>
-);
-
-const ChatBubbleButton: React.FC<{onClick: () => void}> = ({onClick}) => (
-    <button onClick={onClick} className="fixed bottom-6 right-6 motogp-red-bg text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:bg-red-700 transition-transform hover:scale-110 z-40">
-        <SparklesIcon className="w-8 h-8"/>
-    </button>
-);
-
-const ChatWindow: React.FC<{onClose: () => void, data: MotoGpData, rawCsv: string}> = ({ onClose, data, rawCsv }) => {
-    const [history, setHistory] = useState<ChatMessage[]>([{role: 'model', content: '¡Hola! Soy tu analista de MotoGP. ¿Qué quieres saber sobre la competición?'}]);
-    const [query, setQuery] = useState('');
-    const [isChatting, setIsChatting] = useState(false);
-    const chatContainerRef = useRef<HTMLDivElement>(null);
-
-     useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [history]);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!query.trim() || isChatting) return;
-
-        const newHistory: ChatMessage[] = [...history, { role: 'user', content: query }];
-        setHistory(newHistory);
-        setQuery('');
-        setIsChatting(true);
-
-        try {
-            const modelResponse = await chatWithData(data, rawCsv, newHistory, query);
-            setHistory(prev => [...prev, { role: 'model', content: modelResponse }]);
-        } catch (err: any) {
-            setHistory(prev => [...prev, { role: 'model', content: `Lo siento, ocurrió un error: ${err.message}` }]);
-        } finally {
-            setIsChatting(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center p-4">
-             <div className="card-bg rounded-xl shadow-2xl w-full max-w-lg h-[80vh] flex flex-col">
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="font-orbitron text-xl motogp-red">Chatea con tus Datos</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                </header>
-                <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto">
-                    {history.map((msg, index) => (
-                        <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-xs lg:max-w-sm px-4 py-2 rounded-2xl ${msg.role === 'user' ? 'motogp-red-bg text-white rounded-br-none' : 'bg-gray-700 text-gray-200 rounded-bl-none'}`}>
-                                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isChatting && (
-                         <div className="flex justify-start">
-                             <div className="max-w-xs lg:max-w-sm px-4 py-2 rounded-2xl bg-gray-700 text-gray-200 rounded-bl-none">
-                                <div className="flex items-center space-x-2">
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></span>
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
-                    <div className="flex items-center bg-gray-700 rounded-full">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Ej: ¿Quién ganó en Qatar?"
-                            className="w-full bg-transparent text-gray-200 px-5 py-3 focus:outline-none"
-                            disabled={isChatting}
-                        />
-                        <button type="submit" disabled={isChatting || !query.trim()} className="p-3 text-red-500 hover:text-red-400 disabled:text-gray-500 disabled:cursor-not-allowed">
-                            <SendIcon className="w-6 h-6"/>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> = ({ imageDataUrl, onClose }) => {
+function ScreenshotModal({ imageDataUrl, onClose }: { imageDataUrl: string; onClose: () => void; }) {
     const [canShare, setCanShare] = useState(false);
 
     useEffect(() => {
@@ -1786,22 +1453,212 @@ const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> 
             </div>
         </div>
     );
-};
+}
 
-const InfoPruebaTab: React.FC = () => {
-    const [riders, setRiders] = useState<ApiRider[]>([]);
+function ChatBubbleButton({ onClick }: { onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            className="fixed bottom-6 right-6 bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-lg z-40 transition-transform hover:scale-110 flex items-center justify-center"
+            aria-label="Abrir Chat de Asistente"
+        >
+            <SparklesIcon className="w-6 h-6" />
+        </button>
+    );
+}
+
+function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: MotoGpData; rawCsv: string }) {
+    const [messages, setMessages] = useState<ChatMessage[]>([
+        { role: 'model', content: '¡Hola! Soy tu asistente de PorraGP. Pregúntame sobre la clasificación, estadísticas o resultados.' }
+    ]);
+    const [input, setInput] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    const handleSend = async () => {
+        if (!input.trim()) return;
+        
+        const userMessage: ChatMessage = { role: 'user', content: input };
+        setMessages(prev => [...prev, userMessage]);
+        setInput('');
+        setIsSending(true);
+
+        try {
+            const replyText = await chatWithData(data, rawCsv, [...messages, userMessage], userMessage.content);
+            setMessages(prev => [...prev, { role: 'model', content: replyText }]);
+        } catch (error) {
+            setMessages(prev => [...prev, { role: 'model', content: "Lo siento, hubo un error al procesar tu consulta. Verifica la configuración de la API Key." }]);
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    return (
+        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] max-h-[70vh] card-bg rounded-xl shadow-2xl border border-gray-700 flex flex-col z-50 overflow-hidden">
+            <header className="p-4 bg-red-700 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-white">
+                    <SparklesIcon className="w-5 h-5" />
+                    <h3 className="font-bold font-orbitron">Asistente PorraGP</h3>
+                </div>
+                <button onClick={onClose} className="text-white/80 hover:text-white">
+                    <XIcon className="w-6 h-6" />
+                </button>
+            </header>
+            
+            <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-900/90">
+                {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] p-3 rounded-lg text-sm ${
+                            msg.role === 'user' 
+                            ? 'bg-red-600 text-white rounded-br-none' 
+                            : 'bg-gray-700 text-gray-200 rounded-bl-none'
+                        }`}>
+                            {msg.content}
+                        </div>
+                    </div>
+                ))}
+                {isSending && (
+                    <div className="flex justify-start">
+                        <div className="bg-gray-700 text-gray-400 p-3 rounded-lg rounded-bl-none text-sm animate-pulse">
+                            Escribiendo...
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            <div className="p-3 bg-gray-800 border-t border-gray-700 flex gap-2">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder="Pregunta algo..."
+                    className="flex-grow bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <button 
+                    onClick={handleSend}
+                    disabled={isSending || !input.trim()}
+                    className="bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white p-2 rounded-lg transition-colors"
+                >
+                    <SendIcon className="w-5 h-5" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// --- INFO PRUEBA COMPONENTS ---
+
+type InfoView = 'menu' | 'riders_list' | 'events_list' | 'rider_detail';
+
+function InfoPruebaTab({ data }: { data: MotoGpData | null }) {
+    const [currentView, setCurrentView] = useState<InfoView>('menu');
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
+    
+    // Renderizado condicional basado en la vista actual
+    const renderContent = () => {
+        switch (currentView) {
+            case 'menu':
+                return <InfoMenu onSelectView={setCurrentView} />;
+            case 'riders_list':
+                return <RiderListView 
+                    onSelectRider={(id) => {
+                        setSelectedRiderId(id);
+                        setCurrentView('rider_detail');
+                    }} 
+                    onBack={() => setCurrentView('menu')} 
+                />;
+            case 'rider_detail':
+                if (!selectedRiderId) return null;
+                return <RiderDetailView 
+                    riderId={selectedRiderId} 
+                    onBack={() => setCurrentView('riders_list')}
+                    data={data}
+                />;
+            case 'events_list':
+                return (
+                    <div className="card-bg p-8 rounded-xl shadow-lg text-center animate-fade-in">
+                         <button onClick={() => setCurrentView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                            &larr; Volver al menú
+                        </button>
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <FlagIcon className="w-16 h-16 text-gray-500 mb-4" />
+                            <h3 className="text-2xl font-orbitron text-white mb-2">Próximamente</h3>
+                            <p className="text-gray-400">La sección de eventos estará disponible muy pronto.</p>
+                        </div>
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div className="w-full">
+            {renderContent()}
+        </div>
+    );
+}
+
+function InfoMenu({ onSelectView }: { onSelectView: (view: InfoView) => void }) {
+    return (
+        <div className="animate-fade-in">
+            <h2 className="font-orbitron text-3xl text-white text-center mb-8">Datos MotoGP™</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <button 
+                    onClick={() => onSelectView('riders_list')}
+                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
+                >
+                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                        <UserIcon className="w-16 h-16 text-red-500" />
+                    </div>
+                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Pilotos</h2>
+                    <p className="text-gray-400 mt-2 text-center">Consulta la parrilla, fichas y estadísticas de los pilotos.</p>
+                </button>
+
+                <button 
+                    onClick={() => onSelectView('events_list')}
+                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
+                >
+                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                        <FlagIcon className="w-16 h-16 text-red-500" />
+                    </div>
+                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Eventos</h2>
+                    <p className="text-gray-400 mt-2 text-center">Calendario, circuitos y detalles de cada Gran Premio.</p>
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function RiderListView({ onSelectRider, onBack }: { onSelectRider: (id: string) => void, onBack: () => void }) {
+    const [riders, setRiders] = useState<ApiRider[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2025);
+    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2026);
+    const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
 
     useEffect(() => {
         const loadRidersForSeason = async () => {
             try {
                 setError(null);
                 setIsLoading(true);
-                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear);
-                setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
+                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear, selectedCategory);
+                // Ordenar por número (ascendente). Si no hay número, poner al final (999).
+                setRiders(fetchedRiders.sort((a, b) => {
+                    const numA = a.current_career_step?.number || 999;
+                    const numB = b.current_career_step?.number || 999;
+                    return numA - numB;
+                }));
             } catch (err: any) {
                 setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
             } finally {
@@ -1809,34 +1666,53 @@ const InfoPruebaTab: React.FC = () => {
             }
         };
         loadRidersForSeason();
-    }, [selectedSeasonYear]);
-
-    if (selectedRiderId) {
-        return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
-    }
+    }, [selectedSeasonYear, selectedCategory]);
 
     return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h2 className="font-orbitron text-2xl text-white">Parrilla de MotoGP</h2>
-                <select
-                    value={selectedSeasonYear}
-                    onChange={(e) => {
-                        setIsLoading(true);
-                        setSelectedSeasonYear(Number(e.target.value));
-                    }}
-                    className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none"
-                    aria-label="Seleccionar temporada"
-                >
-                    <option value="2025">Temporada 2025</option>
-                    <option value="2026">Temporada 2026</option>
-                </select>
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+            <div className="flex flex-col space-y-6 mb-6">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
+                            &larr; Volver
+                        </button>
+                        <h2 className="font-orbitron text-2xl text-white">Parrilla</h2>
+                    </div>
+                    <select
+                        value={selectedSeasonYear}
+                        onChange={(e) => {
+                            setIsLoading(true);
+                            setSelectedSeasonYear(Number(e.target.value));
+                        }}
+                        className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
+                        aria-label="Seleccionar temporada"
+                    >
+                        <option value="2026">Temporada 2026</option>
+                        <option value="2025">Temporada 2025</option>
+                    </select>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2">
+                    {['MotoGP', 'Moto2', 'Moto3'].map((cat) => (
+                        <button
+                            key={cat}
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-4 py-2 rounded-full font-bold text-sm transition-colors ${
+                                selectedCategory === cat 
+                                ? 'motogp-red-bg text-white' 
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {isLoading && (
                 <div className="text-center py-8">
                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedSeasonYear}...</p>
+                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedCategory} {selectedSeasonYear}...</p>
                 </div>
             )}
 
@@ -1845,18 +1721,23 @@ const InfoPruebaTab: React.FC = () => {
             {!isLoading && !error && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {riders.map(rider => (
-                        <RiderCard key={rider.id} rider={rider} onSelect={() => setSelectedRiderId(rider.id)} />
+                        <RiderCard key={rider.id} rider={rider} onSelect={() => onSelectRider(rider.id)} />
                     ))}
                 </div>
             )}
         </div>
     );
-};
+}
 
-const RiderCard: React.FC<{ rider: ApiRider; onSelect: () => void; }> = ({ rider, onSelect }) => {
+interface RiderCardProps {
+    rider: ApiRider;
+    onSelect: () => void;
+}
+
+const RiderCard: React.FC<RiderCardProps> = ({ rider, onSelect }) => {
     const profilePic = rider.current_career_step?.pictures?.profile?.main;
     return (
-        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full">
+        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full border border-gray-800 hover:border-red-500/50">
             <div className="relative h-48 bg-gray-800">
                 {profilePic ? (
                     <img src={profilePic} alt={`${rider.name} ${rider.surname}`} className="w-full h-full object-cover object-top" />
@@ -1865,47 +1746,66 @@ const RiderCard: React.FC<{ rider: ApiRider; onSelect: () => void; }> = ({ rider
                         <UserIcon className="w-16 h-16 text-gray-600" />
                     </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-                <div className="absolute bottom-0 left-0 p-3">
-                    <div className="flex items-center gap-2">
-                        <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm" />
-                        <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate">{rider.name} {rider.surname}</h3>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+                <div className="absolute bottom-0 left-0 p-3 w-full">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                            <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate text-sm md:text-base">
+                                {rider.name} {rider.surname}
+                            </h3>
+                        </div>
                     </div>
                 </div>
-                 <div className="absolute top-2 right-2 bg-black/50 text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md">
+                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md border border-white/10">
                     {rider.current_career_step?.number}
                 </div>
             </div>
         </button>
     );
-};
+}
 
-const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ riderId, onBack }) => {
+function RiderDetailView({ riderId, onBack, data }: { riderId: string; onBack: () => void; data: MotoGpData | null }) {
     const [rider, setRider] = useState<ApiRider | null>(null);
+    const [stats, setStats] = useState<RiderStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showFullStatsModal, setShowFullStatsModal] = useState(false);
+    const [showSeasonStatsModal, setShowSeasonStatsModal] = useState(false);
 
     useEffect(() => {
-        const loadRiderDetails = async () => {
+        const loadRiderData = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
+                
+                // 1. Cargar detalles básicos
                 const details = await fetchRiderDetails(riderId);
                 setRider(details);
+
+                // 2. Cargar estadísticas si tenemos el legacy_id
+                if (details.legacy_id) {
+                    try {
+                        const statistics = await fetchRiderStats(details.legacy_id);
+                        setStats(statistics);
+                    } catch (statsErr) {
+                        console.warn("No se pudieron cargar las estadísticas extendidas", statsErr);
+                    }
+                }
             } catch (err: any) {
                 setError(err.message || 'No se pudo cargar la ficha del piloto.');
             } finally {
                 setIsLoading(false);
             }
         };
-        loadRiderDetails();
+        loadRiderData();
     }, [riderId]);
 
     if (isLoading) {
         return (
-             <div className="text-center py-8">
-                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                <p className="mt-4 text-gray-300">Cargando ficha del piloto...</p>
+             <div className="text-center py-12">
+                <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-gray-300 font-orbitron">Cargando datos del piloto...</p>
             </div>
         );
     }
@@ -1913,8 +1813,23 @@ const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ r
     if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
     if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
 
-    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, career } = rider;
+    const { name, surname, birth_date, birth_city, country, physical_attributes, career } = rider;
     const current_career_step = career?.find(c => c.current);
+    
+    // Calcular edad dinámicamente
+    const calculateAge = (birthDateString: string): number => {
+        if (!birthDateString) return 0;
+        const birthDate = new Date(birthDateString);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+    const dynamicAge = calculateAge(birth_date);
+
 
     if (!current_career_step) {
         return (
@@ -1935,62 +1850,581 @@ const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ r
                 &larr; Volver a la lista
             </button>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-1 space-y-4">
-                     {pictures.profile.main && <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full rounded-lg shadow-lg object-cover" />}
-                     {pictures.bike.main && <img src={pictures.bike.main} alt="Moto" className="w-full rounded-lg shadow-lg" />}
-                     {pictures.helmet.main && <img src={pictures.helmet.main} alt="Casco" className="w-full rounded-lg shadow-lg" />}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Columna Izquierda: Imágenes */}
+                <div className="lg:col-span-1 space-y-6">
+                     <div className="relative rounded-lg overflow-hidden shadow-2xl border border-gray-700">
+                        {pictures.profile.main ? (
+                            <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full object-cover" />
+                        ) : (
+                            <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
+                                <UserIcon className="w-20 h-20 text-gray-600"/>
+                            </div>
+                        )}
+                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
+                             <h2 className="font-orbitron text-2xl text-white text-center">{name} {surname}</h2>
+                         </div>
+                     </div>
+                     
+                     <div className="grid grid-cols-2 gap-4">
+                        {pictures.bike.main && (
+                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
+                                <img src={pictures.bike.main} alt="Moto" className="w-full h-auto" />
+                                <p className="text-xs text-center text-gray-400 mt-1">Moto</p>
+                            </div>
+                        )}
+                        {pictures.helmet.main && (
+                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
+                                <img src={pictures.helmet.main} alt="Casco" className="w-full h-auto" />
+                                <p className="text-xs text-center text-gray-400 mt-1">Casco</p>
+                            </div>
+                        )}
+                     </div>
                 </div>
 
-                <div className="md:col-span-2">
-                    <div className="flex items-center gap-4 mb-4">
-                        <img src={country.flag} alt={country.name} className="w-12 h-8 object-cover rounded-md shadow-md"/>
-                        <div>
-                            <h2 className="font-orbitron text-3xl sm:text-4xl text-white">{name} <span className="motogp-red">{surname}</span></h2>
-                            <p className="font-orbitron text-5xl sm:text-6xl text-gray-400 -mt-2">{current_career_step.number}</p>
+                {/* Columna Derecha: Datos y Estadísticas */}
+                <div className="lg:col-span-2">
+                    <div className="flex items-start justify-between mb-6 border-b border-gray-700 pb-4">
+                        <div className="flex items-center gap-4">
+                            <img src={country.flag} alt={country.name} className="w-16 h-10 object-cover rounded-md shadow-md border border-gray-600"/>
+                            <div>
+                                <h1 className="font-orbitron text-4xl sm:text-5xl text-white uppercase tracking-wider">{name} <span className="text-red-600">{surname}</span></h1>
+                                <p className="text-gray-400 text-lg">{team.name}</p>
+                            </div>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                             <span className="font-orbitron text-6xl text-white/10 font-bold select-none">#{current_career_step.number}</span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-                        <InfoBlock title="Datos Personales">
-                            <InfoItem label="País" value={country.name} />
-                            <InfoItem label="Ciudad Natal" value={birth_city} />
-                            <InfoItem label="Fecha de Nac." value={new Date(birth_date).toLocaleDateString('es-ES')} />
-                            <InfoItem label="Edad" value={`${years_old} años`} />
-                        </InfoBlock>
-                        
-                        {physical_attributes && (
-                            <InfoBlock title="Atributos Físicos">
-                                <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
-                                <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
-                            </InfoBlock>
-                        )}
+                    {/* Estadísticas Clave con Desglose */}
+                    {stats && (
+                        <>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                                <StatBoxWithBreakdown label="Victorias" total={stats.grand_prix_victories?.total} categories={stats.grand_prix_victories?.categories} />
+                                <StatBoxWithBreakdown label="Podios" total={stats.podiums?.total} categories={stats.podiums?.categories} />
+                                <StatBoxWithBreakdown label="Poles" total={stats.poles?.total} categories={stats.poles?.categories} />
+                                <StatBoxWithBreakdown label="Títulos" total={stats.world_championship_wins?.total} categories={stats.world_championship_wins?.categories} isGold />
+                            </div>
+                            <div className="flex flex-wrap gap-4 mb-8">
+                                <button 
+                                    onClick={() => setShowFullStatsModal(true)}
+                                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors border border-gray-600 flex-1 text-center"
+                                >
+                                    Más estadísticas
+                                </button>
+                                <button 
+                                    onClick={() => setShowSeasonStatsModal(true)}
+                                    className="motogp-red-bg hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex-1 text-center"
+                                >
+                                    Histórico posición
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {data && (
+                        <div className="mb-8">
+                            <h3 className="font-orbitron text-lg text-white mb-4 uppercase">Temporada Actual</h3>
+                            <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-64">
+                                <CurrentSeasonChart results={data.motogpResults} riderSurname={surname} riderName={name} />
+                            </div>
+                        </div>
+                    )}
 
-                        <InfoBlock title="Equipo Actual">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <InfoBlock title="Datos Personales">
+                            <InfoItem label="Nacionalidad" value={country.name} />
+                            <InfoItem label="Ciudad Natal" value={birth_city} />
+                            <InfoItem label="Fecha de Nacimiento" value={new Date(birth_date).toLocaleDateString('es-ES')} />
+                            <InfoItem label="Edad" value={`${dynamicAge} años`} />
+                            {physical_attributes && (
+                                <>
+                                    <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
+                                    <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
+                                </>
+                            )}
+                        </InfoBlock>
+
+                        <InfoBlock title="Equipo & Máquina">
+                            <InfoItem label="Dorsal" value={`#${current_career_step.number}`} />
                             <InfoItem label="Equipo" value={team.name} />
                             <InfoItem label="Constructor" value={team.constructor.name} />
                             <InfoItem label="Categoría" value={current_career_step.category.name} />
-                             {team.picture && <img src={team.picture} alt={team.name} className="mt-4 rounded-md" />}
+                             {team.picture && (
+                                 <div className="mt-4 bg-white/5 p-2 rounded-lg">
+                                     <img src={team.picture} alt={team.name} className="w-full h-auto" />
+                                 </div>
+                             )}
                         </InfoBlock>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Modals */}
+            {showFullStatsModal && stats && (
+                <FullStatsModal stats={stats} onClose={() => setShowFullStatsModal(false)} />
+            )}
+            {showSeasonStatsModal && rider.legacy_id && (
+                <SeasonStatsModal legacyId={rider.legacy_id} onClose={() => setShowSeasonStatsModal(false)} />
+            )}
+        </div>
+    );
+}
+
+function CurrentSeasonChart({ results, riderSurname, riderName }: { results: CircuitResult[], riderSurname: string, riderName: string }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries[0]) {
+                const { width, height } = entries[0].contentRect;
+                setDimensions({ width, height });
+            }
+        });
+        resizeObserver.observe(container);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const chartData = useMemo(() => {
+        if (!results || results.length === 0) return [];
+        
+        return results.map(circuitResult => {
+            const circuitCode = circuitResult.circuit.substring(0, 3).toUpperCase();
+            
+            const isMatch = (driverNameInCsv: string) => {
+                const d = driverNameInCsv.toLowerCase();
+                const s = riderSurname.toLowerCase();
+                const n = riderName.toLowerCase();
+                
+                // Manejo específico para colisiones de apellidos comunes
+                if (s === 'marquez') {
+                    if (n === 'marc') return d.includes('m. marquez') || d.includes('m.marquez');
+                    if (n === 'alex') return d.includes('a. marquez') || d.includes('a.marquez');
+                }
+                if (s === 'fernandez') {
+                     if (n === 'raul') return d.includes('r. fernandez') || d.includes('r.fernandez');
+                     if (n === 'augusto') return d.includes('a. fernandez') || d.includes('a.fernandez');
+                }
+                
+                // Fallback por defecto: si contiene el apellido
+                return d.includes(s);
+            }
+
+            // Buscar resultados del piloto usando la función de coincidencia inteligente
+            const sprintResult = circuitResult.sprint.find(r => isMatch(r.driver));
+            const raceResult = circuitResult.race.find(r => isMatch(r.driver));
+            
+            return {
+                circuit: circuitCode,
+                sprintPoints: sprintResult ? sprintResult.points : 0,
+                racePoints: raceResult ? raceResult.points : 0
+            };
+        });
+    }, [results, riderSurname, riderName]);
+
+    if (chartData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Sin datos de temporada</div>;
+
+    const PADDING = { top: 20, right: 20, bottom: 30, left: 30 };
+    const WIDTH = dimensions.width;
+    const HEIGHT = dimensions.height;
+    const CHART_WIDTH = WIDTH - PADDING.left - PADDING.right;
+    const CHART_HEIGHT = HEIGHT - PADDING.top - PADDING.bottom;
+    const MAX_POINTS = 25;
+
+    const xScale = (index: number) => PADDING.left + (index / (chartData.length - 1 || 1)) * CHART_WIDTH;
+    const yScale = (points: number) => PADDING.top + CHART_HEIGHT - (points / MAX_POINTS) * CHART_HEIGHT;
+
+    const sprintPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.sprintPoints)}`).join(' ');
+    const racePath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.racePoints)}`).join(' ');
+
+    return (
+        <div ref={containerRef} className="w-full h-full">
+            {WIDTH > 0 && (
+                <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-full overflow-visible">
+                    {/* Eje Y Grid */}
+                    {[0, 5, 10, 15, 20, 25].map(val => {
+                        const y = yScale(val);
+                        return (
+                            <g key={val}>
+                                <line x1={PADDING.left} x2={WIDTH - PADDING.right} y1={y} y2={y} stroke="#374151" strokeDasharray="2" />
+                                <text x={PADDING.left - 5} y={y + 3} fill="#9CA3AF" fontSize="10" textAnchor="end">{val}</text>
+                            </g>
+                        );
+                    })}
+
+                    {/* Eje X Labels (Circuitos) */}
+                    {chartData.map((d, i) => (
+                        <text 
+                            key={i} 
+                            x={xScale(i)} 
+                            y={HEIGHT - 5} 
+                            fill="#9CA3AF" 
+                            fontSize="10" 
+                            textAnchor="end" 
+                            transform={`rotate(-45, ${xScale(i)}, ${HEIGHT - 5})`}
+                        >
+                            {d.circuit}
+                        </text>
+                    ))}
+
+                    {/* Líneas */}
+                    <path d={sprintPath} fill="none" stroke="#22c55e" strokeWidth="2" />
+                    <path d={racePath} fill="none" stroke="#ef4444" strokeWidth="2" />
+
+                    {/* Puntos */}
+                    {chartData.map((d, i) => (
+                        <g key={i}>
+                            <circle cx={xScale(i)} cy={yScale(d.sprintPoints)} r="3" fill="#22c55e" />
+                            <circle cx={xScale(i)} cy={yScale(d.racePoints)} r="3" fill="#ef4444" />
+                        </g>
+                    ))}
+                    
+                    {/* Leyenda */}
+                    <g transform={`translate(${WIDTH - 80}, 0)`}>
+                        <rect width="10" height="10" fill="#ef4444" rx="2" />
+                        <text x="15" y="9" fill="#ef4444" fontSize="10" fontWeight="bold">RACE</text>
+                        <rect y="15" width="10" height="10" fill="#22c55e" rx="2" />
+                        <text x="15" y="24" fill="#22c55e" fontSize="10" fontWeight="bold">SPR</text>
+                    </g>
+                </svg>
+            )}
+        </div>
+    );
+}
+
+function StatBoxWithBreakdown({ label, total, categories, isGold }: { label: string; total: number | undefined; categories: any[] | undefined; isGold?: boolean }) {
+    const safeTotal = total ?? 0;
+    
+    const breakdownText = useMemo(() => {
+        if (!categories || categories.length === 0) return null;
+
+        // Función auxiliar para determinar el orden
+        const getCategoryOrder = (name: string) => {
+            if (name.includes('125')) return 1;
+            if (name.includes('Moto3')) return 2;
+            if (name.includes('250')) return 3;
+            if (name.includes('Moto2')) return 4;
+            if (name.includes('500')) return 5;
+            if (name.includes('MotoGP')) return 6;
+            return 7; 
+        };
+
+        // Ordenar las categorías: 125cc -> Moto3 -> 250cc -> Moto2 -> 500cc -> MotoGP
+        const sortedCategories = [...categories].sort((a, b) => {
+             return getCategoryOrder(a.category.name) - getCategoryOrder(b.category.name);
+        });
+
+        // Mapear nombres largos a códigos cortos
+        return sortedCategories.map((cat: any) => {
+            const name = cat.category.name || '';
+            let shortCode = '';
+            if (name.includes('MotoGP')) shortCode = 'MGP';
+            else if (name.includes('Moto2')) shortCode = 'M2';
+            else if (name.includes('Moto3')) shortCode = 'M3';
+            else if (name.includes('125')) shortCode = '125';
+            else if (name.includes('250')) shortCode = '250';
+            else if (name.includes('500')) shortCode = '500';
+            else shortCode = name.substring(0, 3).toUpperCase();
+            
+            return `${shortCode}-${cat.count}`;
+        }).join(' ');
+    }, [categories]);
+
+    return (
+        <div className={`p-4 rounded-lg text-center border flex flex-col justify-center items-center ${isGold ? 'bg-yellow-900/20 border-yellow-600/50' : 'bg-gray-800 border-gray-700'}`}>
+            <p className={`text-3xl font-orbitron font-bold ${isGold ? 'text-yellow-500' : 'text-white'}`}>{safeTotal}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{label}</p>
+            {breakdownText && (
+                <p className="text-[10px] text-gray-500 mt-2 font-mono">{breakdownText}</p>
+            )}
+        </div>
+    );
+}
+
+function FullStatsModal({ stats, onClose }: { stats: RiderStats; onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">Estadísticas Completas</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-6 overflow-y-auto space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                         <StatBoxWithBreakdown label="Carreras" total={stats.all_races?.total} categories={stats.all_races?.categories} />
+                         <StatBoxWithBreakdown label="Vueltas Rápidas" total={stats.race_fastest_laps?.total} categories={stats.race_fastest_laps?.categories} />
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <DetailStatRow title="Primer Gran Premio" items={stats.first_grand_prix} />
+                        <DetailStatRow title="Primera Victoria" items={stats.first_grand_prix_victories} />
+                        <DetailStatRow title="Primer Podio" items={stats.first_podiums} />
+                        <DetailStatRow title="Primera Pole" items={stats.first_pole_positions} />
                     </div>
                 </div>
             </div>
         </div>
     );
-};
+}
 
-const InfoBlock: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
-    <div className="bg-gray-900/50 p-4 rounded-lg">
-        <h3 className="font-orbitron text-lg motogp-red mb-3 border-b border-gray-700 pb-2">{title}</h3>
-        <div className="space-y-2">{children}</div>
-    </div>
-);
+function DetailStatRow({ title, items }: { title: string; items: any[] | undefined }) {
+    if (!items || items.length === 0) return null;
+    return (
+        <div className="bg-gray-800/50 p-3 rounded border border-gray-700">
+            <h4 className="text-gray-400 text-xs uppercase mb-2">{title}</h4>
+            {items.map((item, idx) => (
+                <div key={idx} className="text-sm text-white mb-1 last:mb-0">
+                    <span className="font-bold text-red-400">{item.category.name}:</span> {item.event.season} {item.event.name}
+                </div>
+            ))}
+        </div>
+    );
+}
 
-const InfoItem: React.FC<{ label: string, value: string | number }> = ({ label, value }) => (
-    <div className="flex justify-between text-sm">
-        <span className="text-gray-400">{label}:</span>
-        <span className="font-bold text-white text-right">{value}</span>
-    </div>
-);
+function SeasonStatsModal({ legacyId, onClose }: { legacyId: number; onClose: () => void }) {
+    const [seasonStats, setSeasonStats] = useState<RiderSeasonStat[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const data = await fetchRiderSeasonStats(legacyId);
+                setSeasonStats(data);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        load();
+    }, [legacyId]);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">Historial por Temporada</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-4 overflow-auto">
+                    {isLoading ? (
+                        <div className="text-center py-8 text-gray-400">Cargando historial...</div>
+                    ) : (
+                        <table className="w-full text-xs sm:text-sm text-left text-gray-300">
+                            <thead className="text-xs text-red-400 uppercase bg-gray-900/50 sticky top-0">
+                                <tr>
+                                    <th className="px-2 py-3">Año</th>
+                                    <th className="px-2 py-3">Cat</th>
+                                    <th className="px-2 py-3">Moto</th>
+                                    <th className="px-2 py-3 text-center">Pos</th>
+                                    <th className="px-2 py-3 text-center">Pts</th>
+                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Vic</th>
+                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Pod</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {seasonStats.map((stat, idx) => (
+                                    <tr key={idx} className="border-b border-gray-700 hover:bg-gray-800/50">
+                                        <td className="px-2 py-3 font-bold text-white">{stat.season}</td>
+                                        <td className="px-2 py-3">{stat.category}</td>
+                                        <td className="px-2 py-3">{stat.constructor}</td>
+                                        <td className="px-2 py-3 text-center font-bold text-white">{stat.position || '-'}</td>
+                                        <td className="px-2 py-3 text-center">{stat.points}</td>
+                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.first_position}</td>
+                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.podiums}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+interface InfoBlockProps {
+    title: string;
+    children?: React.ReactNode;
+}
+
+const InfoBlock: React.FC<InfoBlockProps> = ({ title, children }) => {
+    return (
+        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+            <h3 className="font-orbitron text-lg text-red-500 mb-4 border-b border-gray-800 pb-2 uppercase">{title}</h3>
+            <div className="space-y-3">{children}</div>
+        </div>
+    );
+}
+
+function InfoItem({ label, value }: { label: string, value: string | number }) {
+    return (
+        <div className="flex justify-between text-sm items-center">
+            <span className="text-gray-500 font-medium">{label}</span>
+            <span className="font-bold text-gray-200 text-right">{value}</span>
+        </div>
+    );
+}
+
+function StatCard({ title, value, metric, icon }: { title: string, value: string, metric: string, icon: React.ReactNode }) {
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600 hover:bg-gray-800/60 transition-colors duration-300">
+            <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+                {icon}
+            </div>
+            <div>
+                <p className="text-sm text-gray-400">{title}</p>
+                <p className="text-lg sm:text-2xl font-bold text-white font-orbitron truncate">{value}</p>
+                <p className="text-xs sm:text-sm text-green-500">{metric}</p>
+            </div>
+        </div>
+    );
+}
+
+interface PlayerVoteCardProps {
+    player: string;
+    vote: string;
+    onClick: () => void;
+}
+
+const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({ player, vote, onClick }) => {
+    const riderColor = getRiderColor(vote);
+    return (
+        <div 
+            onClick={onClick}
+            className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 flex items-center justify-between hover:bg-gray-800 cursor-pointer transition-colors group"
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-10 rounded-full" style={{ backgroundColor: riderColor }}></div>
+                <div>
+                    <p className="font-bold text-white group-hover:text-red-400 transition-colors">{player}</p>
+                    <p className="text-sm text-gray-400">Voto: <span className="text-white font-medium">{vote}</span></p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PlayerVoteDetailsModal({ player, data, onClose }: { player: string; data: MotoGpData; onClose: () => void }) {
+    const playerVotes = data.playerVotes.find(p => p.player === player);
+    const score = data.standings.find(p => p.player === player);
+
+    if (!playerVotes || !score) return null;
+
+    const voteCounts: Record<string, number> = {};
+    playerVotes.votesPerRace.forEach(vote => {
+        if (vote && vote !== '-') {
+            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+        }
+    });
+
+    const sortedVotes = Object.entries(voteCounts).sort((a, b) => b[1] - a[1]);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">{player}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-6 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-gray-800 p-3 rounded-lg text-center">
+                            <p className="text-gray-400 text-xs uppercase">Puntos Totales</p>
+                            <p className="text-2xl font-bold text-white font-orbitron">{score.totalPoints}</p>
+                        </div>
+                        <div className="bg-gray-800 p-3 rounded-lg text-center">
+                            <p className="text-gray-400 text-xs uppercase">Pilotos Votados</p>
+                            <p className="text-2xl font-bold text-white font-orbitron">{Object.keys(voteCounts).length}</p>
+                        </div>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white mb-3">Historial de Votos</h3>
+                    <div className="space-y-2">
+                        {sortedVotes.map(([driver, count]) => (
+                            <div key={driver} className="flex items-center justify-between bg-gray-800/50 p-2 rounded border border-gray-700">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1 h-8 rounded" style={{ backgroundColor: getRiderColor(driver) }}></div>
+                                    <span className="text-white font-medium">{driver}</span>
+                                </div>
+                                <span className="text-gray-400 font-bold">{count}x</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function VotesChart({ data }: { data: { driver: string; count: number }[] }) {
+    const maxVotes = Math.max(...data.map(d => d.count), 1);
+    const activeData = data.filter(d => d.count > 0).sort((a, b) => b.count - a.count);
+
+    if (activeData.length === 0) {
+        return <p className="text-gray-400 text-center py-8">Este jugador aún no ha votado.</p>;
+    }
+
+    return (
+        <div className="space-y-3">
+            {activeData.map(item => (
+                <div key={item.driver} className="relative">
+                    <div className="flex justify-between text-sm mb-1">
+                        <span className="text-white font-bold">{item.driver}</span>
+                        <span className="text-gray-400">{item.count} votos</span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-2.5">
+                        <div 
+                            className="h-2.5 rounded-full transition-all duration-500"
+                            style={{ 
+                                width: `${(item.count / maxVotes) * 100}%`,
+                                backgroundColor: getRiderColor(item.driver)
+                            }}
+                        ></div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ResultsTable({ results }: { results: RaceResult[] }) {
+    if (!results || results.length === 0) {
+        return <p className="text-gray-500 text-sm italic">Resultados no disponibles.</p>;
+    }
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-300">
+                <thead className="text-xs text-gray-400 uppercase bg-gray-800/50">
+                    <tr>
+                        <th className="px-4 py-2 text-center w-12">Pos</th>
+                        <th className="px-4 py-2">Piloto</th>
+                        <th className="px-4 py-2 text-center">Pts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {results.map((res) => (
+                        <tr key={res.position} className="border-b border-gray-700">
+                            <td className="px-4 py-3 text-center">
+                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold 
+                                    ${res.position === 1 ? 'bg-yellow-500 text-black' : 
+                                      res.position === 2 ? 'bg-gray-400 text-black' : 
+                                      res.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-white'}`}>
+                                    {res.position}
+                                </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-white">{res.driver}</td>
+                            <td className="px-4 py-3 text-center">{res.points}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
 
 export default App;

@@ -1,4 +1,5 @@
-import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider } from '../types';
+
+import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider, RiderStats, RiderSeasonStat } from '../types';
 
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_BASE_URL = 'https://api.motogp.pulselive.com/motogp/v1';
@@ -106,16 +107,20 @@ export const fetchSeasons = async (): Promise<ApiSeason[]> => {
     return seasons.sort((a, b) => b.year - a.year);
 };
 
-export const fetchRidersBySeason = async (seasonYear: number): Promise<ApiRider[]> => {
-    // 1. Obtener el ID de la categoría MotoGP para el año seleccionado.
+export const fetchRidersBySeason = async (seasonYear: number, categoryName: string = 'MotoGP'): Promise<ApiRider[]> => {
+    // 1. Obtener el ID de la categoría para el año seleccionado.
     const categories = await apiFetch<ApiCategory[]>(`/categories?seasonYear=${seasonYear}`);
-    const motogpCategory = categories.find(c => c.name === 'MotoGP');
-    if (!motogpCategory) {
-        throw new Error(`No se encontró la categoría de MotoGP para el año ${seasonYear}.`);
+    
+    // Ajustar búsqueda para que coincida con la API (MotoGP™, Moto2™, etc.)
+    const normalizedSearchName = categoryName.toLowerCase();
+    const targetCategory = categories.find(c => c.name.toLowerCase().includes(normalizedSearchName));
+    
+    if (!targetCategory) {
+        throw new Error(`No se encontró la categoría ${categoryName} para el año ${seasonYear}.`);
     }
 
     // 2. Obtener los equipos (y sus pilotos) para esa temporada y categoría.
-    const teams = await apiFetch<any[]>(`/teams?categoryUuid=${motogpCategory.id}&seasonYear=${seasonYear}`);
+    const teams = await apiFetch<any[]>(`/teams?categoryUuid=${targetCategory.id}&seasonYear=${seasonYear}`);
 
     // 3. Extraer y aplanar la lista de pilotos.
     const allRiders = teams.flatMap(team => team.riders || []);
@@ -133,4 +138,12 @@ export const fetchRidersBySeason = async (seasonYear: number): Promise<ApiRider[
 
 export const fetchRiderDetails = async (riderId: string): Promise<ApiRider> => {
     return apiFetch<ApiRider>(`/riders/${riderId}`);
+};
+
+export const fetchRiderStats = async (legacyId: number): Promise<RiderStats> => {
+    return apiFetch<RiderStats>(`/riders/${legacyId}/stats`);
+};
+
+export const fetchRiderSeasonStats = async (legacyId: number): Promise<RiderSeasonStat[]> => {
+    return apiFetch<RiderSeasonStat[]>(`/riders/${legacyId}/statistics`);
 };
