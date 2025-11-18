@@ -90,11 +90,11 @@ export const fetchOfficialResults = async (): Promise<CircuitResult[]> => {
 };
 
 export const fetchLiveTiming = async (): Promise<LiveTimingResponse> => {
-    // Este endpoint no necesita el proxy porque es de un dominio diferente y parece tener CORS habilitado.
-    const url = `${PROXY_URL}${encodeURIComponent('https://api.motogp.pulselive.com/motogp/v1/timing-gateway/livetiming-lite')}`;
+    // Este endpoint tiene CORS 'Access-Control-Allow-Origin: *', por lo que se puede llamar directamente sin proxy.
+    const url = 'https://api.motogp.pulselive.com/motogp/v1/timing-gateway/livetiming-lite';
     const response = await fetch(url);
     if (!response.ok) {
-        throw new Error('Error al obtener los datos de Live Timing.');
+        throw new Error(`Error al obtener los datos de Live Timing (código ${response.status}).`);
     }
     return response.json();
 };
