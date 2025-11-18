@@ -2,6 +2,7 @@
   "name": "PorraGP Full 2025",
   "short_name": "PorraGP",
   "description": "El dashboard definitivo para la porra de MotoGP. Sigue la clasificación, analiza estadísticas y no te pierdas ninguna carrera.",
+  "id": "/PorraGP-FULL-2025/",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#121212",

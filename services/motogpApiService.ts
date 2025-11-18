@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 
 import type { CircuitResult, RaceResult, LiveTimingResponse, ApiSeason, ApiCategory, ApiRider } from '../types';
+=======
+import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider } from '../types';
+>>>>>>> dfe01d2f695e9806faf9cf8d01444a22a1dd2acf
 
 const PROXY_URL = 'https://corsproxy.io/?';
 const API_BASE_URL = 'https://api.motogp.pulselive.com/motogp/v1';
@@ -89,8 +93,7 @@ export const fetchOfficialResults = async (): Promise<CircuitResult[]> => {
     }
 };
 
-export const fetchLiveTiming = async (): Promise<LiveTimingResponse> => {
-    // Este endpoint no necesita el proxy porque es de un dominio diferente y parece tener CORS habilitado.
+export const fetchLiveTiming = async (): Promise<LiveTimingData> => {
     const url = `${PROXY_URL}${encodeURIComponent('https://api.motogp.pulselive.com/motogp/v1/timing-gateway/livetiming-lite')}`;
     const response = await fetch(url);
     if (!response.ok) {
