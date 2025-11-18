@@ -1,13 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-<<<<<<< HEAD
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats } from './services/motogpApiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat } from './types';
-=======
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead } from './types';
->>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -222,199 +217,6 @@ function RefreshButton({ onClick, isLoading }: { onClick: () => void; isLoading:
     );
 }
 
-function App() {
-    const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
-    const [rawCsv, setRawCsv] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isChatOpen, setIsChatOpen] = useState(false);
-
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            // Se añade un parámetro a la URL para evitar problemas de caché
-            const url = `${SHEET_URL}&_=${new Date().getTime()}`;
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Error al obtener los datos (código ${response.status}).`);
-            }
-            const text = await response.text();
-            setRawCsv(text);
-            const data = parseCsvData(text);
-            setMotoGpData(data);
-        } catch (err: any) {
-            setError(err.message || 'Ocurrió un error al procesar los datos.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-        
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // Usamos la variable de entorno BASE_URL de Vite para construir la ruta correcta.
-                // Se añade optional chaining y un fallback para entornos donde vite no inyecta las variables.
-                const baseUrl = import.meta.env?.BASE_URL ?? '/PorraGP-FULL-2025/';
-                const swUrl = `${baseUrl}service-worker.js`;
-                navigator.serviceWorker.register(swUrl)
-                    .then(registration => {
-                        console.log('ServiceWorker registrado correctamente en:', registration.scope);
-                    })
-                    .catch(err => {
-                        console.error('Error en el registro de ServiceWorker:', err);
-                    });
-            });
-        }
-
-    }, [fetchData]);
-
-    const handleSetTab = (tab: Tab) => {
-        setActiveTab(tab);
-        setIsMenuOpen(false);
-    }
-
-    const renderContent = () => {
-        // Redirige a la pestaña de Live Timing si se solicita específicamente
-        if (activeTab === 'livetiming') {
-            return <LiveTimingTab />;
-        }
-        if (isLoading) {
-            return (
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-lg text-gray-300 font-orbitron">Arrancando motores...</p>
-                </div>
-            );
-        }
-        if (error) {
-            return <p className="text-center text-red-400">{error}</p>;
-        }
-        if (!motoGpData) {
-            return <p className="text-center text-gray-400">No se han podido cargar los datos.</p>;
-        }
-
-        switch (activeTab) {
-            case 'dashboard':
-                return <DashboardTab data={motoGpData} setActiveTab={setActiveTab} />;
-            case 'standings':
-                return <StandingsTab data={motoGpData} />;
-            case 'statistics':
-                return <StatisticsTab data={motoGpData} />;
-            case 'circuits':
-                 return <CircuitsTab data={motoGpData} />;
-            case 'participantes':
-                 return <ParticipantesTab data={motoGpData} />;
-            case 'motogp_results':
-                 return <MotoGpResultsTab data={motoGpData} />;
-             case 'votar':
-                return <VotarTab />;
-            case 'noticias':
-                return <NewsTab />;
-            case 'info_prueba':
-                return <InfoPruebaTab data={motoGpData} />;
-            default:
-                return null;
-        }
-    };
-
-    return (
-        <div className={`min-h-screen w-full flex flex-col ${activeTab !== 'livetiming' ? 'p-4 sm:p-8' : ''}`}>
-            <header className={`w-full max-w-7xl mx-auto flex justify-between items-center mb-8 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                <button 
-                    onClick={() => handleSetTab('dashboard')} 
-                    className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
-                >
-                    <span className="transition-colors duration-300 group-hover:motogp-red">Porra</span>
-                    <span className="motogp-red transition-colors duration-300 group-hover:text-white">GP</span>
-                </button>
-                <RefreshButton onClick={fetchData} isLoading={isLoading} />
-            </header>
-
-            <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
-                <div className={`flex justify-between items-center ${activeTab === 'livetiming' ? 'px-4 sm:px-8 py-4' : 'mb-8 border-b border-gray-700'}`}>
-                    {/* Mobile Menu Button & Dropdown */}
-                    <div className={`sm:hidden relative ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                        <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
-                             <MenuIcon className="w-6 h-6" />
-                        </button>
-                        {isMenuOpen && (
-                            <>
-                                {/* Backdrop to close menu on click outside */}
-                                <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
-                                <div
-                                    className="absolute left-0 mt-2 w-56 origin-top-left rounded-md shadow-lg card-bg ring-1 ring-black ring-opacity-5 z-50"
-                                >
-                                    <div className="py-1" role="menu" aria-orientation="vertical">
-                                        {TABS.map(({name, tab}) => (
-                                            <button
-                                                key={tab}
-                                                onClick={() => handleSetTab(tab)}
-                                                className={`${
-                                                    activeTab === tab ? 'motogp-red bg-gray-900/50' : 'text-gray-300'
-                                                } block w-full text-left px-4 py-4 text-lg hover:bg-gray-700/80 transition-colors`}
-                                                role="menuitem"
-                                            >
-                                                {name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Desktop Tabs */}
-                    <nav className={`hidden sm:flex -mb-px space-x-6 overflow-x-auto ${activeTab === 'livetiming' ? 'hidden' : ''}`} aria-label="Tabs">
-                         {TABS.map(({ name, tab }) => (
-                            <TabButton
-                                key={tab}
-                                name={name}
-                                tab={tab}
-                                activeTab={activeTab}
-                                setActiveTab={handleSetTab}
-                            />
-                        ))}
-                    </nav>
-                     {activeTab === 'livetiming' ? (
-                        <button
-                            onClick={() => handleSetTab('dashboard')}
-                            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap"
-                        >
-                            &larr; Volver
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => setActiveTab('livetiming')}
-                            className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
-                        >
-                            LiveTiming
-                        </button>
-                    )}
-                </div>
-                {renderContent()}
-            </main>
-            
-            <footer className={`w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                 <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
-            </footer>
-
-             <ChatBubbleButton onClick={() => setIsChatOpen(true)} />
-            {isChatOpen && motoGpData && (
-                <ChatWindow
-                    onClose={() => setIsChatOpen(false)}
-                    data={motoGpData}
-                    rawCsv={rawCsv}
-                />
-            )}
-        </div>
-    );
-}
-
 interface TabButtonProps {
     name: string;
     tab: Tab;
@@ -436,8 +238,6 @@ const TabButton: React.FC<TabButtonProps> = ({ name, tab, activeTab, setActiveTa
         </button>
     )
 }
-
-// --- TABS ---
 
 function InstallAppCard({ onOpenModal }: { onOpenModal: (os: 'android' | 'ios') => void }) {
     return (
@@ -507,6 +307,1123 @@ function InstallInstructionsModal({ os, onClose }: { os: 'android' | 'ios'; onCl
     );
 }
 
+function StatCard({ title, value, metric, icon }: { title: string, value: string, metric: string, icon: React.ReactNode }) {
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600 hover:bg-gray-800/60 transition-colors duration-300">
+            <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+                {icon}
+            </div>
+            <div>
+                <p className="text-sm text-gray-400">{title}</p>
+                <p className="text-lg sm:text-2xl font-bold text-white font-orbitron truncate">{value}</p>
+                <p className="text-xs sm:text-sm text-green-500">{metric}</p>
+            </div>
+        </div>
+    );
+}
+
+interface PlayerVoteCardProps {
+    player: string;
+    vote: string;
+    onClick: () => void;
+}
+
+const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({ player, vote, onClick }) => {
+    const riderColor = getRiderColor(vote);
+    return (
+        <div 
+            onClick={onClick}
+            className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 flex items-center justify-between hover:bg-gray-800 cursor-pointer transition-colors group"
+        >
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-10 rounded-full" style={{ backgroundColor: riderColor }}></div>
+                <div>
+                    <p className="font-bold text-white group-hover:text-red-400 transition-colors">{player}</p>
+                    <p className="text-sm text-gray-400">Voto: <span className="text-white font-medium">{vote}</span></p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PlayerVoteDetailsModal({ player, data, onClose }: { player: string; data: MotoGpData; onClose: () => void }) {
+    const playerVotes = data.playerVotes.find(p => p.player === player);
+    const score = data.standings.find(p => p.player === player);
+
+    if (!playerVotes || !score) return null;
+
+    const voteCounts: Record<string, number> = {};
+    playerVotes.votesPerRace.forEach(vote => {
+        if (vote && vote !== '-') {
+            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+        }
+    });
+
+    const sortedVotes = Object.entries(voteCounts).sort((a, b) => b[1] - a[1]);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">{player}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-6 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-gray-800 p-3 rounded-lg text-center">
+                            <p className="text-gray-400 text-xs uppercase">Puntos Totales</p>
+                            <p className="text-2xl font-bold text-white font-orbitron">{score.totalPoints}</p>
+                        </div>
+                        <div className="bg-gray-800 p-3 rounded-lg text-center">
+                            <p className="text-gray-400 text-xs uppercase">Pilotos Votados</p>
+                            <p className="text-2xl font-bold text-white font-orbitron">{Object.keys(voteCounts).length}</p>
+                        </div>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white mb-3">Historial de Votos</h3>
+                    <div className="space-y-2">
+                        {sortedVotes.map(([driver, count]) => (
+                            <div key={driver} className="flex items-center justify-between bg-gray-800/50 p-2 rounded border border-gray-700">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1 h-8 rounded" style={{ backgroundColor: getRiderColor(driver) }}></div>
+                                    <span className="text-white font-medium">{driver}</span>
+                                </div>
+                                <span className="text-gray-400 font-bold">{count}x</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ScreenshotModal({ imageDataUrl, onClose }: { imageDataUrl: string; onClose: () => void; }) {
+    const [canShare, setCanShare] = useState(false);
+
+    useEffect(() => {
+        if (navigator.share) {
+            setCanShare(true);
+        }
+    }, []);
+    
+    const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+        const res = await fetch(dataUrl);
+        return await res.blob();
+    };
+
+    const handleShare = async () => {
+        if (!navigator.share) {
+            alert("Tu navegador no soporta la función de compartir. Por favor, descarga la imagen y compártela manualmente.");
+            return;
+        }
+
+        try {
+            const blob = await dataUrlToBlob(imageDataUrl);
+            const file = new File([blob], 'clasificacion-porragp.png', { type: 'image/png' });
+            
+            await navigator.share({
+                title: 'Clasificación PorraGP',
+                text: '¡Así va la clasificación de la PorraGP!',
+                files: [file],
+            });
+        } catch (error) {
+            console.error('Error sharing:', error);
+        }
+    };
+    
+    const handleDownload = () => {
+        const link = document.createElement('a');
+        link.href = imageDataUrl;
+        link.download = 'clasificacion-porragp.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
+                    <h2 className="font-orbitron text-lg text-white">Vista Previa</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="flex-1 p-4 overflow-y-auto">
+                    <img src={imageDataUrl} alt="Captura de la clasificación" className="w-full h-auto rounded-md border border-gray-600" />
+                </div>
+                <footer className="p-4 border-t border-gray-700 flex flex-wrap justify-center sm:justify-end gap-3 flex-shrink-0">
+                    <button 
+                        onClick={handleDownload}
+                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
+                    >
+                       <DownloadIcon className="w-5 h-5 mr-2" /> Descargar
+                    </button>
+                    {canShare && (
+                        <button 
+                             onClick={handleShare}
+                             className="motogp-red-bg hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
+                        >
+                            <ShareIcon className="w-5 h-5 mr-2" /> Compartir
+                        </button>
+                    )}
+                </footer>
+            </div>
+        </div>
+    );
+}
+
+function EvolutionChart({ data, selectedPlayers, playerColors }: {
+    data: MotoGpData;
+    selectedPlayers: string[];
+    playerColors: Map<string, string>;
+}) {
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+    useEffect(() => {
+        const container = chartContainerRef.current;
+        if (!container) return;
+
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries[0]) {
+                const { width } = entries[0].contentRect;
+                // Maintain a 2:1 aspect ratio, but with a minimum height for small screens
+                const height = Math.max(width / 2, 250);
+                setDimensions({ width, height });
+            }
+        });
+
+        resizeObserver.observe(container);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const chartData = useMemo(() => {
+        const racesWithPoints = data.races.filter((_, raceIndex) => 
+            data.standings.some(player => player.pointsPerRace[raceIndex] > 0)
+        );
+
+        if (racesWithPoints.length === 0) {
+            return { races: [], series: [] };
+        }
+
+        const series = data.standings
+            .filter(player => selectedPlayers.includes(player.player))
+            .map(player => {
+                let cumulativePoints = 0;
+                const points = racesWithPoints.map((_, raceIndex) => {
+                    const originalIndex = data.races.findIndex(r => r.circuit === racesWithPoints[raceIndex].circuit);
+                    cumulativePoints += player.pointsPerRace[originalIndex] || 0;
+                    return cumulativePoints;
+                });
+                return {
+                    name: player.player,
+                    data: points,
+                    color: playerColors.get(player.player) || '#888'
+                };
+            });
+
+        return {
+            races: racesWithPoints.map(r => r.circuit.substring(0, 3).toUpperCase()),
+            series: series,
+        };
+    }, [data, selectedPlayers, playerColors]);
+
+    const PADDING = { top: 20, right: 20, bottom: 40, left: 40 };
+    const SVG_WIDTH = dimensions.width;
+    const SVG_HEIGHT = dimensions.height;
+    const CHART_WIDTH = SVG_WIDTH > PADDING.left + PADDING.right ? SVG_WIDTH - PADDING.left - PADDING.right : 0;
+    const CHART_HEIGHT = SVG_HEIGHT > PADDING.top + PADDING.bottom ? SVG_HEIGHT - PADDING.top - PADDING.bottom : 0;
+
+
+    const maxY = useMemo(() => {
+        const maxPoint = Math.max(0, ...chartData.series.flatMap(s => s.data));
+        return Math.ceil(maxPoint / 50) * 50 || 50; // Round up to nearest 50
+    }, [chartData]);
+    
+    if (chartData.races.length === 0) {
+        return <div className="text-center py-10 text-gray-400">No hay datos de carreras para mostrar la evolución.</div>
+    }
+
+    const xScale = (index: number) => PADDING.left + (index / (chartData.races.length - 1)) * CHART_WIDTH;
+    const yScale = (value: number) => PADDING.top + CHART_HEIGHT - (value / maxY) * CHART_HEIGHT;
+
+    const generatePath = (points: number[]) => {
+        if (chartData.races.length <= 1) { // Cannot draw a line with less than 2 points
+             const point = points.length > 0 ? points[0] : 0;
+             return `M ${xScale(0)} ${yScale(point)}`;
+        }
+        return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(p)}`).join(' ');
+    };
+
+    return (
+        <div ref={chartContainerRef} className="w-full">
+            {SVG_WIDTH > 0 && (
+                <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}>
+                    {/* Y-Axis Grid Lines and Labels */}
+                    {[...Array(6)].map((_, i) => {
+                        const y = PADDING.top + (i * CHART_HEIGHT / 5);
+                        const value = maxY - (i * maxY / 5);
+                        return (
+                            <g key={i}>
+                                <line x1={PADDING.left} x2={PADDING.left + CHART_WIDTH} y1={y} y2={y} stroke="#4A5568" strokeDasharray="2" />
+                                <text x={PADDING.left - 8} y={y + 4} fill="#A0AEC0" textAnchor="end" fontSize="10">{value}</text>
+                            </g>
+                        );
+                    })}
+
+                    {/* X-Axis Labels */}
+                    {chartData.races.map((race, i) => (
+                        <text key={race} x={xScale(i)} y={SVG_HEIGHT - PADDING.bottom + 15} fill="#A0AEC0" textAnchor="middle" fontSize="10">
+                            {race}
+                        </text>
+                    ))}
+                    
+                    {/* Data Lines and Points */}
+                    {chartData.series.map(series => (
+                        <g key={series.name}>
+                            <path d={generatePath(series.data)} fill="none" stroke={series.color} strokeWidth="2" />
+                            {series.data.map((point, i) => (
+                                <circle key={i} cx={xScale(i)} cy={yScale(point)} r="3" fill={series.color} />
+                            ))}
+                        </g>
+                    ))}
+                </svg>
+            )}
+        </div>
+    );
+}
+
+function VotesChart({ data }: { data: { driver: string; count: number }[] }) {
+    const maxVotes = Math.max(...data.map(d => d.count), 1);
+    const activeData = data.filter(d => d.count > 0).sort((a, b) => b.count - a.count);
+
+    if (activeData.length === 0) {
+        return <p className="text-gray-400 text-center py-8">Este jugador aún no ha votado.</p>;
+    }
+
+    return (
+        <div className="space-y-3">
+            {activeData.map(item => (
+                <div key={item.driver} className="relative">
+                    <div className="flex justify-between text-sm mb-1">
+                        <span className="text-white font-bold">{item.driver}</span>
+                        <span className="text-gray-400">{item.count} votos</span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-2.5">
+                        <div 
+                            className="h-2.5 rounded-full transition-all duration-500"
+                            style={{ 
+                                width: `${(item.count / maxVotes) * 100}%`,
+                                backgroundColor: getRiderColor(item.driver)
+                            }}
+                        ></div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ResultsTable({ results }: { results: RaceResult[] }) {
+    if (!results || results.length === 0) {
+        return <p className="text-gray-500 text-sm italic">Resultados no disponibles.</p>;
+    }
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-300">
+                <thead className="text-xs text-gray-400 uppercase bg-gray-800/50">
+                    <tr>
+                        <th className="px-4 py-2 text-center w-12">Pos</th>
+                        <th className="px-4 py-2">Piloto</th>
+                        <th className="px-4 py-2 text-center">Pts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {results.map((res) => (
+                        <tr key={res.position} className="border-b border-gray-700">
+                            <td className="px-4 py-3 text-center">
+                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold 
+                                    ${res.position === 1 ? 'bg-yellow-500 text-black' : 
+                                      res.position === 2 ? 'bg-gray-400 text-black' : 
+                                      res.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-white'}`}>
+                                    {res.position}
+                                </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-white">{res.driver}</td>
+                            <td className="px-4 py-3 text-center">{res.points}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function ChatBubbleButton({ onClick }: { onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            className="fixed bottom-6 right-6 bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-lg z-40 transition-transform hover:scale-110 flex items-center justify-center"
+            aria-label="Abrir Chat de Asistente"
+        >
+            <SparklesIcon className="w-6 h-6" />
+        </button>
+    );
+}
+
+function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: MotoGpData; rawCsv: string }) {
+    const [messages, setMessages] = useState<ChatMessage[]>([
+        { role: 'model', content: '¡Hola! Soy tu asistente de PorraGP. Pregúntame sobre la clasificación, estadísticas o resultados.' }
+    ]);
+    const [input, setInput] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    const handleSend = async () => {
+        if (!input.trim()) return;
+        
+        const userMessage: ChatMessage = { role: 'user', content: input };
+        setMessages(prev => [...prev, userMessage]);
+        setInput('');
+        setIsSending(true);
+
+        try {
+            const replyText = await chatWithData(data, rawCsv, [...messages, userMessage], userMessage.content);
+            setMessages(prev => [...prev, { role: 'model', content: replyText }]);
+        } catch (error) {
+            setMessages(prev => [...prev, { role: 'model', content: "Lo siento, hubo un error al procesar tu consulta. Verifica la configuración de la API Key." }]);
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    return (
+        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] max-h-[70vh] card-bg rounded-xl shadow-2xl border border-gray-700 flex flex-col z-50 overflow-hidden">
+            <header className="p-4 bg-red-700 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-white">
+                    <SparklesIcon className="w-5 h-5" />
+                    <h3 className="font-bold font-orbitron">Asistente PorraGP</h3>
+                </div>
+                <button onClick={onClose} className="text-white/80 hover:text-white">
+                    <XIcon className="w-6 h-6" />
+                </button>
+            </header>
+            
+            <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-900/90">
+                {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] p-3 rounded-lg text-sm ${
+                            msg.role === 'user' 
+                            ? 'bg-red-600 text-white rounded-br-none' 
+                            : 'bg-gray-700 text-gray-200 rounded-bl-none'
+                        }`}>
+                            {msg.content}
+                        </div>
+                    </div>
+                ))}
+                {isSending && (
+                    <div className="flex justify-start">
+                        <div className="bg-gray-700 text-gray-400 p-3 rounded-lg rounded-bl-none text-sm animate-pulse">
+                            Escribiendo...
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            <div className="p-3 bg-gray-800 border-t border-gray-700 flex gap-2">
+                <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    placeholder="Pregunta algo..."
+                    className="flex-grow bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <button 
+                    onClick={handleSend}
+                    disabled={isSending || !input.trim()}
+                    className="bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white p-2 rounded-lg transition-colors"
+                >
+                    <SendIcon className="w-5 h-5" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// --- INFO PRUEBA COMPONENTS ---
+
+interface RiderCardProps {
+    rider: ApiRider;
+    onSelect: () => void;
+}
+
+const RiderCard: React.FC<RiderCardProps> = ({ rider, onSelect }) => {
+    const profilePic = rider.current_career_step?.pictures?.profile?.main;
+    return (
+        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full border border-gray-800 hover:border-red-500/50">
+            <div className="relative h-48 bg-gray-800">
+                {profilePic ? (
+                    <img src={profilePic} alt={`${rider.name} ${rider.surname}`} className="w-full h-full object-cover object-top" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <UserIcon className="w-16 h-16 text-gray-600" />
+                    </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+                <div className="absolute bottom-0 left-0 p-3 w-full">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                            <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate text-sm md:text-base">
+                                {rider.name} {rider.surname}
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md border border-white/10">
+                    {rider.current_career_step?.number}
+                </div>
+            </div>
+        </button>
+    );
+}
+
+type InfoView = 'menu' | 'riders_list' | 'events_list' | 'rider_detail';
+
+function InfoMenu({ onSelectView }: { onSelectView: (view: InfoView) => void }) {
+    return (
+        <div className="animate-fade-in">
+            <h2 className="font-orbitron text-3xl text-white text-center mb-8">Datos MotoGP™</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <button 
+                    onClick={() => onSelectView('riders_list')}
+                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
+                >
+                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                        <UserIcon className="w-16 h-16 text-red-500" />
+                    </div>
+                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Pilotos</h2>
+                    <p className="text-gray-400 mt-2 text-center">Consulta la parrilla, fichas y estadísticas de los pilotos.</p>
+                </button>
+
+                <button 
+                    onClick={() => onSelectView('events_list')}
+                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
+                >
+                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+                        <FlagIcon className="w-16 h-16 text-red-500" />
+                    </div>
+                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Eventos</h2>
+                    <p className="text-gray-400 mt-2 text-center">Calendario, circuitos y detalles de cada Gran Premio.</p>
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function RiderListView({ onSelectRider, onBack }: { onSelectRider: (id: string) => void, onBack: () => void }) {
+    const [riders, setRiders] = useState<ApiRider[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2026);
+    const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
+
+    useEffect(() => {
+        const loadRidersForSeason = async () => {
+            try {
+                setError(null);
+                setIsLoading(true);
+                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear, selectedCategory);
+                // Ordenar por número (ascendente). Si no hay número, poner al final (999).
+                setRiders(fetchedRiders.sort((a, b) => {
+                    const numA = a.current_career_step?.number || 999;
+                    const numB = b.current_career_step?.number || 999;
+                    return numA - numB;
+                }));
+            } catch (err: any) {
+                setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadRidersForSeason();
+    }, [selectedSeasonYear, selectedCategory]);
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+            <div className="flex flex-col space-y-6 mb-6">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
+                            &larr; Volver
+                        </button>
+                        <h2 className="font-orbitron text-2xl text-white">Parrilla</h2>
+                    </div>
+                    <select
+                        value={selectedSeasonYear}
+                        onChange={(e) => {
+                            setIsLoading(true);
+                            setSelectedSeasonYear(Number(e.target.value));
+                        }}
+                        className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
+                        aria-label="Seleccionar temporada"
+                    >
+                        <option value="2026">Temporada 2026</option>
+                        <option value="2025">Temporada 2025</option>
+                    </select>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2">
+                    {['MotoGP', 'Moto2', 'Moto3'].map((cat) => (
+                        <button
+                            key={cat}
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-4 py-2 rounded-full font-bold text-sm transition-colors ${
+                                selectedCategory === cat 
+                                ? 'motogp-red-bg text-white' 
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {isLoading && (
+                <div className="text-center py-8">
+                    <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedCategory} {selectedSeasonYear}...</p>
+                </div>
+            )}
+
+            {error && <p className="text-center text-red-400 py-8">{error}</p>}
+            
+            {!isLoading && !error && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {riders.map(rider => (
+                        <RiderCard key={rider.id} rider={rider} onSelect={() => onSelectRider(rider.id)} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function InfoItem({ label, value }: { label: string, value: string | number }) {
+    return (
+        <div className="flex justify-between text-sm items-center">
+            <span className="text-gray-500 font-medium">{label}</span>
+            <span className="font-bold text-gray-200 text-right">{value}</span>
+        </div>
+    );
+}
+
+interface InfoBlockProps {
+    title: string;
+    children?: React.ReactNode;
+}
+
+const InfoBlock: React.FC<InfoBlockProps> = ({ title, children }) => {
+    return (
+        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+            <h3 className="font-orbitron text-lg text-red-500 mb-4 border-b border-gray-800 pb-2 uppercase">{title}</h3>
+            <div className="space-y-3">{children}</div>
+        </div>
+    );
+}
+
+function StatBoxWithBreakdown({ label, total, categories, isGold }: { label: string; total: number | undefined; categories: any[] | undefined; isGold?: boolean }) {
+    const safeTotal = total ?? 0;
+    
+    const breakdownText = useMemo(() => {
+        if (!categories || categories.length === 0) return null;
+
+        // Función auxiliar para determinar el orden
+        const getCategoryOrder = (name: string) => {
+            if (name.includes('125')) return 1;
+            if (name.includes('Moto3')) return 2;
+            if (name.includes('250')) return 3;
+            if (name.includes('Moto2')) return 4;
+            if (name.includes('500')) return 5;
+            if (name.includes('MotoGP')) return 6;
+            return 7; 
+        };
+
+        // Ordenar las categorías: 125cc -> Moto3 -> 250cc -> Moto2 -> 500cc -> MotoGP
+        const sortedCategories = [...categories].sort((a, b) => {
+             return getCategoryOrder(a.category.name) - getCategoryOrder(b.category.name);
+        });
+
+        // Mapear nombres largos a códigos cortos
+        return sortedCategories.map((cat: any) => {
+            const name = cat.category.name || '';
+            let shortCode = '';
+            if (name.includes('MotoGP')) shortCode = 'MGP';
+            else if (name.includes('Moto2')) shortCode = 'M2';
+            else if (name.includes('Moto3')) shortCode = 'M3';
+            else if (name.includes('125')) shortCode = '125';
+            else if (name.includes('250')) shortCode = '250';
+            else if (name.includes('500')) shortCode = '500';
+            else shortCode = name.substring(0, 3).toUpperCase();
+            
+            return `${shortCode}-${cat.count}`;
+        }).join(' ');
+    }, [categories]);
+
+    return (
+        <div className={`p-4 rounded-lg text-center border flex flex-col justify-center items-center ${isGold ? 'bg-yellow-900/20 border-yellow-600/50' : 'bg-gray-800 border-gray-700'}`}>
+            <p className={`text-3xl font-orbitron font-bold ${isGold ? 'text-yellow-500' : 'text-white'}`}>{safeTotal}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{label}</p>
+            {breakdownText && (
+                <p className="text-[10px] text-gray-500 mt-2 font-mono">{breakdownText}</p>
+            )}
+        </div>
+    );
+}
+
+function DetailStatRow({ title, items }: { title: string; items: any[] | undefined }) {
+    if (!items || items.length === 0) return null;
+    return (
+        <div className="bg-gray-800/50 p-3 rounded border border-gray-700">
+            <h4 className="text-gray-400 text-xs uppercase mb-2">{title}</h4>
+            {items.map((item, idx) => (
+                <div key={idx} className="text-sm text-white mb-1 last:mb-0">
+                    <span className="font-bold text-red-400">{item.category.name}:</span> {item.event.season} {item.event.name}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function FullStatsModal({ stats, onClose }: { stats: RiderStats; onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">Estadísticas Completas</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-6 overflow-y-auto space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                         <StatBoxWithBreakdown label="Carreras" total={stats.all_races?.total} categories={stats.all_races?.categories} />
+                         <StatBoxWithBreakdown label="Vueltas Rápidas" total={stats.race_fastest_laps?.total} categories={stats.race_fastest_laps?.categories} />
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <DetailStatRow title="Primer Gran Premio" items={stats.first_grand_prix} />
+                        <DetailStatRow title="Primera Victoria" items={stats.first_grand_prix_victories} />
+                        <DetailStatRow title="Primer Podio" items={stats.first_podiums} />
+                        <DetailStatRow title="Primera Pole" items={stats.first_pole_positions} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function SeasonStatsModal({ legacyId, onClose }: { legacyId: number; onClose: () => void }) {
+    const [seasonStats, setSeasonStats] = useState<RiderSeasonStat[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const data = await fetchRiderSeasonStats(legacyId);
+                setSeasonStats(data);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        load();
+    }, [legacyId]);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className="card-bg rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="font-orbitron text-xl text-white">Historial por Temporada</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                </header>
+                <div className="p-4 overflow-auto">
+                    {isLoading ? (
+                        <div className="text-center py-8 text-gray-400">Cargando historial...</div>
+                    ) : (
+                        <table className="w-full text-xs sm:text-sm text-left text-gray-300">
+                            <thead className="text-xs text-red-400 uppercase bg-gray-900/50 sticky top-0">
+                                <tr>
+                                    <th className="px-2 py-3">Año</th>
+                                    <th className="px-2 py-3">Cat</th>
+                                    <th className="px-2 py-3">Moto</th>
+                                    <th className="px-2 py-3 text-center">Pos</th>
+                                    <th className="px-2 py-3 text-center">Pts</th>
+                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Vic</th>
+                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Pod</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {seasonStats.map((stat, idx) => (
+                                    <tr key={idx} className="border-b border-gray-700 hover:bg-gray-800/50">
+                                        <td className="px-2 py-3 font-bold text-white">{stat.season}</td>
+                                        <td className="px-2 py-3">{stat.category}</td>
+                                        <td className="px-2 py-3">{stat.constructor}</td>
+                                        <td className="px-2 py-3 text-center font-bold text-white">{stat.position || '-'}</td>
+                                        <td className="px-2 py-3 text-center">{stat.points}</td>
+                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.first_position}</td>
+                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.podiums}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function CurrentSeasonChart({ results, riderSurname, riderName }: { results: CircuitResult[], riderSurname: string, riderName: string }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries[0]) {
+                const { width, height } = entries[0].contentRect;
+                setDimensions({ width, height });
+            }
+        });
+        resizeObserver.observe(container);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const chartData = useMemo(() => {
+        if (!results || results.length === 0) return [];
+        
+        return results.map(circuitResult => {
+            const circuitCode = circuitResult.circuit.substring(0, 3).toUpperCase();
+            
+            const isMatch = (driverNameInCsv: string) => {
+                const d = driverNameInCsv.toLowerCase();
+                const s = riderSurname.toLowerCase();
+                const n = riderName.toLowerCase();
+                
+                // Manejo específico para colisiones de apellidos comunes
+                if (s === 'marquez') {
+                    if (n === 'marc') return d.includes('m. marquez') || d.includes('m.marquez');
+                    if (n === 'alex') return d.includes('a. marquez') || d.includes('a.marquez');
+                }
+                if (s === 'fernandez') {
+                     if (n === 'raul') return d.includes('r. fernandez') || d.includes('r.fernandez');
+                     if (n === 'augusto') return d.includes('a. fernandez') || d.includes('a.fernandez');
+                }
+                
+                // Fallback por defecto: si contiene el apellido
+                return d.includes(s);
+            }
+
+            // Buscar resultados del piloto usando la función de coincidencia inteligente
+            const sprintResult = circuitResult.sprint.find(r => isMatch(r.driver));
+            const raceResult = circuitResult.race.find(r => isMatch(r.driver));
+            
+            return {
+                circuit: circuitCode,
+                sprintPoints: sprintResult ? sprintResult.points : 0,
+                racePoints: raceResult ? raceResult.points : 0
+            };
+        });
+    }, [results, riderSurname, riderName]);
+
+    if (chartData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Sin datos de temporada</div>;
+
+    const PADDING = { top: 20, right: 20, bottom: 30, left: 30 };
+    const WIDTH = dimensions.width;
+    const HEIGHT = dimensions.height;
+    const CHART_WIDTH = WIDTH - PADDING.left - PADDING.right;
+    const CHART_HEIGHT = HEIGHT - PADDING.top - PADDING.bottom;
+    const MAX_POINTS = 25;
+
+    const xScale = (index: number) => PADDING.left + (index / (chartData.length - 1 || 1)) * CHART_WIDTH;
+    const yScale = (points: number) => PADDING.top + CHART_HEIGHT - (points / MAX_POINTS) * CHART_HEIGHT;
+
+    const sprintPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.sprintPoints)}`).join(' ');
+    const racePath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.racePoints)}`).join(' ');
+
+    return (
+        <div ref={containerRef} className="w-full h-full">
+            {WIDTH > 0 && (
+                <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-full overflow-visible">
+                    {/* Eje Y Grid */}
+                    {[0, 5, 10, 15, 20, 25].map(val => {
+                        const y = yScale(val);
+                        return (
+                            <g key={val}>
+                                <line x1={PADDING.left} x2={WIDTH - PADDING.right} y1={y} y2={y} stroke="#374151" strokeDasharray="2" />
+                                <text x={PADDING.left - 5} y={y + 3} fill="#9CA3AF" fontSize="10" textAnchor="end">{val}</text>
+                            </g>
+                        );
+                    })}
+
+                    {/* Eje X Labels (Circuitos) */}
+                    {chartData.map((d, i) => (
+                        <text 
+                            key={i} 
+                            x={xScale(i)} 
+                            y={HEIGHT - 5} 
+                            fill="#9CA3AF" 
+                            fontSize="10" 
+                            textAnchor="end" 
+                            transform={`rotate(-45, ${xScale(i)}, ${HEIGHT - 5})`}
+                        >
+                            {d.circuit}
+                        </text>
+                    ))}
+
+                    {/* Líneas */}
+                    <path d={sprintPath} fill="none" stroke="#22c55e" strokeWidth="2" />
+                    <path d={racePath} fill="none" stroke="#ef4444" strokeWidth="2" />
+
+                    {/* Puntos */}
+                    {chartData.map((d, i) => (
+                        <g key={i}>
+                            <circle cx={xScale(i)} cy={yScale(d.sprintPoints)} r="3" fill="#22c55e" />
+                            <circle cx={xScale(i)} cy={yScale(d.racePoints)} r="3" fill="#ef4444" />
+                        </g>
+                    ))}
+                    
+                    {/* Leyenda */}
+                    <g transform={`translate(${WIDTH - 80}, 0)`}>
+                        <rect width="10" height="10" fill="#ef4444" rx="2" />
+                        <text x="15" y="9" fill="#ef4444" fontSize="10" fontWeight="bold">RACE</text>
+                        <rect y="15" width="10" height="10" fill="#22c55e" rx="2" />
+                        <text x="15" y="24" fill="#22c55e" fontSize="10" fontWeight="bold">SPR</text>
+                    </g>
+                </svg>
+            )}
+        </div>
+    );
+}
+
+function RiderDetailView({ riderId, onBack, data }: { riderId: string; onBack: () => void; data: MotoGpData | null }) {
+    const [rider, setRider] = useState<ApiRider | null>(null);
+    const [stats, setStats] = useState<RiderStats | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [showFullStatsModal, setShowFullStatsModal] = useState(false);
+    const [showSeasonStatsModal, setShowSeasonStatsModal] = useState(false);
+
+    useEffect(() => {
+        const loadRiderData = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                
+                // 1. Cargar detalles básicos
+                const details = await fetchRiderDetails(riderId);
+                setRider(details);
+
+                // 2. Cargar estadísticas si tenemos el legacy_id
+                if (details.legacy_id) {
+                    try {
+                        const statistics = await fetchRiderStats(details.legacy_id);
+                        setStats(statistics);
+                    } catch (statsErr) {
+                        console.warn("No se pudieron cargar las estadísticas extendidas", statsErr);
+                    }
+                }
+            } catch (err: any) {
+                setError(err.message || 'No se pudo cargar la ficha del piloto.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadRiderData();
+    }, [riderId]);
+
+    if (isLoading) {
+        return (
+             <div className="text-center py-12">
+                <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                <p className="mt-4 text-gray-300 font-orbitron">Cargando datos del piloto...</p>
+            </div>
+        );
+    }
+    
+    if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
+    if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
+
+    const { name, surname, birth_date, birth_city, country, physical_attributes, career } = rider;
+    const current_career_step = career?.find(c => c.current);
+    
+    // Calcular edad dinámicamente
+    const calculateAge = (birthDateString: string): number => {
+        if (!birthDateString) return 0;
+        const birthDate = new Date(birthDateString);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+    const dynamicAge = calculateAge(birth_date);
+
+
+    if (!current_career_step) {
+        return (
+             <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+                 <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                    &larr; Volver a la lista
+                </button>
+                <p className="text-center text-yellow-400 py-8">No se encontró información de la temporada actual para este piloto ({name} {surname}).</p>
+             </div>
+        );
+    }
+
+    const { team, pictures } = current_career_step;
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver a la lista
+            </button>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Columna Izquierda: Imágenes */}
+                <div className="lg:col-span-1 space-y-6">
+                     <div className="relative rounded-lg overflow-hidden shadow-2xl border border-gray-700">
+                        {pictures.profile.main ? (
+                            <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full object-cover" />
+                        ) : (
+                            <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
+                                <UserIcon className="w-20 h-20 text-gray-600"/>
+                            </div>
+                        )}
+                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
+                             <h2 className="font-orbitron text-2xl text-white text-center">{name} {surname}</h2>
+                         </div>
+                     </div>
+                     
+                     <div className="grid grid-cols-2 gap-4">
+                        {pictures.bike.main && (
+                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
+                                <img src={pictures.bike.main} alt="Moto" className="w-full h-auto" />
+                                <p className="text-xs text-center text-gray-400 mt-1">Moto</p>
+                            </div>
+                        )}
+                        {pictures.helmet.main && (
+                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
+                                <img src={pictures.helmet.main} alt="Casco" className="w-full h-auto" />
+                                <p className="text-xs text-center text-gray-400 mt-1">Casco</p>
+                            </div>
+                        )}
+                     </div>
+                </div>
+
+                {/* Columna Derecha: Datos y Estadísticas */}
+                <div className="lg:col-span-2">
+                    <div className="flex items-start justify-between mb-6 border-b border-gray-700 pb-4">
+                        <div className="flex items-center gap-4">
+                            <img src={country.flag} alt={country.name} className="w-16 h-10 object-cover rounded-md shadow-md border border-gray-600"/>
+                            <div>
+                                <h1 className="font-orbitron text-4xl sm:text-5xl text-white uppercase tracking-wider">{name} <span className="text-red-600">{surname}</span></h1>
+                                <p className="text-gray-400 text-lg">{team.name}</p>
+                            </div>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                             <span className="font-orbitron text-6xl text-white/10 font-bold select-none">#{current_career_step.number}</span>
+                        </div>
+                    </div>
+
+                    {/* Estadísticas Clave con Desglose */}
+                    {stats && (
+                        <>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                                <StatBoxWithBreakdown label="Victorias" total={stats.grand_prix_victories?.total} categories={stats.grand_prix_victories?.categories} />
+                                <StatBoxWithBreakdown label="Podios" total={stats.podiums?.total} categories={stats.podiums?.categories} />
+                                <StatBoxWithBreakdown label="Poles" total={stats.poles?.total} categories={stats.poles?.categories} />
+                                <StatBoxWithBreakdown label="Títulos" total={stats.world_championship_wins?.total} categories={stats.world_championship_wins?.categories} isGold />
+                            </div>
+                            <div className="flex flex-wrap gap-4 mb-8">
+                                <button 
+                                    onClick={() => setShowFullStatsModal(true)}
+                                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors border border-gray-600 flex-1 text-center"
+                                >
+                                    Más estadísticas
+                                </button>
+                                <button 
+                                    onClick={() => setShowSeasonStatsModal(true)}
+                                    className="motogp-red-bg hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex-1 text-center"
+                                >
+                                    Histórico posición
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {data && (
+                        <div className="mb-8">
+                            <h3 className="font-orbitron text-lg text-white mb-4 uppercase">Temporada Actual</h3>
+                            <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-64">
+                                <CurrentSeasonChart results={data.motogpResults} riderSurname={surname} riderName={name} />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <InfoBlock title="Datos Personales">
+                            <InfoItem label="Nacionalidad" value={country.name} />
+                            <InfoItem label="Ciudad Natal" value={birth_city} />
+                            <InfoItem label="Fecha de Nacimiento" value={new Date(birth_date).toLocaleDateString('es-ES')} />
+                            <InfoItem label="Edad" value={`${dynamicAge} años`} />
+                            {physical_attributes && (
+                                <>
+                                    <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
+                                    <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
+                                </>
+                            )}
+                        </InfoBlock>
+
+                        <InfoBlock title="Equipo & Máquina">
+                            <InfoItem label="Dorsal" value={`#${current_career_step.number}`} />
+                            <InfoItem label="Equipo" value={team.name} />
+                            <InfoItem label="Constructor" value={team.constructor.name} />
+                            <InfoItem label="Categoría" value={current_career_step.category.name} />
+                             {team.picture && (
+                                 <div className="mt-4 bg-white/5 p-2 rounded-lg">
+                                     <img src={team.picture} alt={team.name} className="w-full h-auto" />
+                                 </div>
+                             )}
+                        </InfoBlock>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Modals */}
+            {showFullStatsModal && stats && (
+                <FullStatsModal stats={stats} onClose={() => setShowFullStatsModal(false)} />
+            )}
+            {showSeasonStatsModal && rider.legacy_id && (
+                <SeasonStatsModal legacyId={rider.legacy_id} onClose={() => setShowSeasonStatsModal(false)} />
+            )}
+        </div>
+    );
+}
 
 function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: (tab: Tab) => void }) {
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
@@ -793,128 +1710,6 @@ function StatisticsTab({ data }: { data: MotoGpData }) {
     );
 }
 
-function EvolutionChart({ data, selectedPlayers, playerColors }: {
-    data: MotoGpData;
-    selectedPlayers: string[];
-    playerColors: Map<string, string>;
-}) {
-    const chartContainerRef = useRef<HTMLDivElement>(null);
-    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-    useEffect(() => {
-        const container = chartContainerRef.current;
-        if (!container) return;
-
-        const resizeObserver = new ResizeObserver(entries => {
-            if (entries[0]) {
-                const { width } = entries[0].contentRect;
-                // Maintain a 2:1 aspect ratio, but with a minimum height for small screens
-                const height = Math.max(width / 2, 250);
-                setDimensions({ width, height });
-            }
-        });
-
-        resizeObserver.observe(container);
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    const chartData = useMemo(() => {
-        const racesWithPoints = data.races.filter((_, raceIndex) => 
-            data.standings.some(player => player.pointsPerRace[raceIndex] > 0)
-        );
-
-        if (racesWithPoints.length === 0) {
-            return { races: [], series: [] };
-        }
-
-        const series = data.standings
-            .filter(player => selectedPlayers.includes(player.player))
-            .map(player => {
-                let cumulativePoints = 0;
-                const points = racesWithPoints.map((_, raceIndex) => {
-                    const originalIndex = data.races.findIndex(r => r.circuit === racesWithPoints[raceIndex].circuit);
-                    cumulativePoints += player.pointsPerRace[originalIndex] || 0;
-                    return cumulativePoints;
-                });
-                return {
-                    name: player.player,
-                    data: points,
-                    color: playerColors.get(player.player) || '#888'
-                };
-            });
-
-        return {
-            races: racesWithPoints.map(r => r.circuit.substring(0, 3).toUpperCase()),
-            series: series,
-        };
-    }, [data, selectedPlayers, playerColors]);
-
-    const PADDING = { top: 20, right: 20, bottom: 40, left: 40 };
-    const SVG_WIDTH = dimensions.width;
-    const SVG_HEIGHT = dimensions.height;
-    const CHART_WIDTH = SVG_WIDTH > PADDING.left + PADDING.right ? SVG_WIDTH - PADDING.left - PADDING.right : 0;
-    const CHART_HEIGHT = SVG_HEIGHT > PADDING.top + PADDING.bottom ? SVG_HEIGHT - PADDING.top - PADDING.bottom : 0;
-
-
-    const maxY = useMemo(() => {
-        const maxPoint = Math.max(0, ...chartData.series.flatMap(s => s.data));
-        return Math.ceil(maxPoint / 50) * 50 || 50; // Round up to nearest 50
-    }, [chartData]);
-    
-    if (chartData.races.length === 0) {
-        return <div className="text-center py-10 text-gray-400">No hay datos de carreras para mostrar la evolución.</div>
-    }
-
-    const xScale = (index: number) => PADDING.left + (index / (chartData.races.length - 1)) * CHART_WIDTH;
-    const yScale = (value: number) => PADDING.top + CHART_HEIGHT - (value / maxY) * CHART_HEIGHT;
-
-    const generatePath = (points: number[]) => {
-        if (chartData.races.length <= 1) { // Cannot draw a line with less than 2 points
-             const point = points.length > 0 ? points[0] : 0;
-             return `M ${xScale(0)} ${yScale(point)}`;
-        }
-        return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(p)}`).join(' ');
-    };
-
-    return (
-        <div ref={chartContainerRef} className="w-full">
-            {SVG_WIDTH > 0 && (
-                <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}>
-                    {/* Y-Axis Grid Lines and Labels */}
-                    {[...Array(6)].map((_, i) => {
-                        const y = PADDING.top + (i * CHART_HEIGHT / 5);
-                        const value = maxY - (i * maxY / 5);
-                        return (
-                            <g key={i}>
-                                <line x1={PADDING.left} x2={PADDING.left + CHART_WIDTH} y1={y} y2={y} stroke="#4A5568" strokeDasharray="2" />
-                                <text x={PADDING.left - 8} y={y + 4} fill="#A0AEC0" textAnchor="end" fontSize="10">{value}</text>
-                            </g>
-                        );
-                    })}
-
-                    {/* X-Axis Labels */}
-                    {chartData.races.map((race, i) => (
-                        <text key={race} x={xScale(i)} y={SVG_HEIGHT - PADDING.bottom + 15} fill="#A0AEC0" textAnchor="middle" fontSize="10">
-                            {race}
-                        </text>
-                    ))}
-                    
-                    {/* Data Lines and Points */}
-                    {chartData.series.map(series => (
-                        <g key={series.name}>
-                            <path d={generatePath(series.data)} fill="none" stroke={series.color} strokeWidth="2" />
-                            {series.data.map((point, i) => (
-                                <circle key={i} cx={xScale(i)} cy={yScale(point)} r="3" fill={series.color} />
-                            ))}
-                        </g>
-                    ))}
-                </svg>
-            )}
-        </div>
-    );
-}
-
-
 function CircuitsTab({ data }: { data: MotoGpData }) {
     const [selectedCircuitIndex, setSelectedCircuitIndex] = useState(0);
     
@@ -1132,11 +1927,7 @@ function VotarTab() {
     );
 }
 
-<<<<<<< HEAD
 function LiveTimingTab() {
-=======
-const LiveTimingTab: React.FC = () => {
->>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const wakeLockSentinelRef = useRef<any>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1260,11 +2051,7 @@ const LiveTimingTab: React.FC = () => {
     );
 }
 
-<<<<<<< HEAD
 function NewsTab() {
-=======
-const NewsTab: React.FC = () => {
->>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253
     const [articles, setArticles] = useState<Article[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -1394,185 +2181,6 @@ const NewsTab: React.FC = () => {
     );
 }
 
-function ScreenshotModal({ imageDataUrl, onClose }: { imageDataUrl: string; onClose: () => void; }) {
-    const [canShare, setCanShare] = useState(false);
-
-    useEffect(() => {
-        if (navigator.share) {
-            setCanShare(true);
-        }
-    }, []);
-    
-    const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
-        const res = await fetch(dataUrl);
-        return await res.blob();
-    };
-
-    const handleShare = async () => {
-        if (!navigator.share) {
-            alert("Tu navegador no soporta la función de compartir. Por favor, descarga la imagen y compártela manualmente.");
-            return;
-        }
-
-        try {
-            const blob = await dataUrlToBlob(imageDataUrl);
-            const file = new File([blob], 'clasificacion-porragp.png', { type: 'image/png' });
-            
-            await navigator.share({
-                title: 'Clasificación PorraGP',
-                text: '¡Así va la clasificación de la PorraGP!',
-                files: [file],
-            });
-        } catch (error) {
-            console.error('Error sharing:', error);
-        }
-    };
-    
-    const handleDownload = () => {
-        const link = document.createElement('a');
-        link.href = imageDataUrl;
-        link.download = 'clasificacion-porragp.png';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
-            <div className="card-bg rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
-                    <h2 className="font-orbitron text-lg text-white">Vista Previa</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                </header>
-                <div className="flex-1 p-4 overflow-y-auto">
-                    <img src={imageDataUrl} alt="Captura de la clasificación" className="w-full h-auto rounded-md border border-gray-600" />
-                </div>
-                <footer className="p-4 border-t border-gray-700 flex flex-wrap justify-center sm:justify-end gap-3 flex-shrink-0">
-                    <button 
-                        onClick={handleDownload}
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
-                    >
-                       <DownloadIcon className="w-5 h-5 mr-2" /> Descargar
-                    </button>
-                    {canShare && (
-                        <button 
-                             onClick={handleShare}
-                             className="motogp-red-bg hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center"
-                        >
-                            <ShareIcon className="w-5 h-5 mr-2" /> Compartir
-                        </button>
-                    )}
-                </footer>
-            </div>
-        </div>
-    );
-}
-
-function ChatBubbleButton({ onClick }: { onClick: () => void }) {
-    return (
-        <button
-            onClick={onClick}
-            className="fixed bottom-6 right-6 bg-red-600 hover:bg-red-500 text-white p-4 rounded-full shadow-lg z-40 transition-transform hover:scale-110 flex items-center justify-center"
-            aria-label="Abrir Chat de Asistente"
-        >
-            <SparklesIcon className="w-6 h-6" />
-        </button>
-    );
-}
-
-function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: MotoGpData; rawCsv: string }) {
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        { role: 'model', content: '¡Hola! Soy tu asistente de PorraGP. Pregúntame sobre la clasificación, estadísticas o resultados.' }
-    ]);
-    const [input, setInput] = useState('');
-    const [isSending, setIsSending] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const handleSend = async () => {
-        if (!input.trim()) return;
-        
-        const userMessage: ChatMessage = { role: 'user', content: input };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-        setIsSending(true);
-
-        try {
-            const replyText = await chatWithData(data, rawCsv, [...messages, userMessage], userMessage.content);
-            setMessages(prev => [...prev, { role: 'model', content: replyText }]);
-        } catch (error) {
-            setMessages(prev => [...prev, { role: 'model', content: "Lo siento, hubo un error al procesar tu consulta. Verifica la configuración de la API Key." }]);
-        } finally {
-            setIsSending(false);
-        }
-    };
-
-    return (
-        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] max-h-[70vh] card-bg rounded-xl shadow-2xl border border-gray-700 flex flex-col z-50 overflow-hidden">
-            <header className="p-4 bg-red-700 flex justify-between items-center">
-                <div className="flex items-center gap-2 text-white">
-                    <SparklesIcon className="w-5 h-5" />
-                    <h3 className="font-bold font-orbitron">Asistente PorraGP</h3>
-                </div>
-                <button onClick={onClose} className="text-white/80 hover:text-white">
-                    <XIcon className="w-6 h-6" />
-                </button>
-            </header>
-            
-            <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-900/90">
-                {messages.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                            msg.role === 'user' 
-                            ? 'bg-red-600 text-white rounded-br-none' 
-                            : 'bg-gray-700 text-gray-200 rounded-bl-none'
-                        }`}>
-                            {msg.content}
-                        </div>
-                    </div>
-                ))}
-                {isSending && (
-                    <div className="flex justify-start">
-                        <div className="bg-gray-700 text-gray-400 p-3 rounded-lg rounded-bl-none text-sm animate-pulse">
-                            Escribiendo...
-                        </div>
-                    </div>
-                )}
-                <div ref={messagesEndRef} />
-            </div>
-
-            <div className="p-3 bg-gray-800 border-t border-gray-700 flex gap-2">
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Pregunta algo..."
-                    className="flex-grow bg-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <button 
-                    onClick={handleSend}
-                    disabled={isSending || !input.trim()}
-                    className="bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white p-2 rounded-lg transition-colors"
-                >
-                    <SendIcon className="w-5 h-5" />
-                </button>
-            </div>
-        </div>
-    );
-}
-
-// --- INFO PRUEBA COMPONENTS ---
-
-type InfoView = 'menu' | 'riders_list' | 'events_list' | 'rider_detail';
-
 function InfoPruebaTab({ data }: { data: MotoGpData | null }) {
     const [currentView, setCurrentView] = useState<InfoView>('menu');
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
@@ -1622,538 +2230,197 @@ function InfoPruebaTab({ data }: { data: MotoGpData | null }) {
     );
 }
 
-function InfoMenu({ onSelectView }: { onSelectView: (view: InfoView) => void }) {
-    return (
-        <div className="animate-fade-in">
-            <h2 className="font-orbitron text-3xl text-white text-center mb-8">Datos MotoGP™</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <button 
-                    onClick={() => onSelectView('riders_list')}
-                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
-                >
-                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
-                        <UserIcon className="w-16 h-16 text-red-500" />
-                    </div>
-                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Pilotos</h2>
-                    <p className="text-gray-400 mt-2 text-center">Consulta la parrilla, fichas y estadísticas de los pilotos.</p>
-                </button>
-
-                <button 
-                    onClick={() => onSelectView('events_list')}
-                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
-                >
-                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
-                        <FlagIcon className="w-16 h-16 text-red-500" />
-                    </div>
-                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Eventos</h2>
-                    <p className="text-gray-400 mt-2 text-center">Calendario, circuitos y detalles de cada Gran Premio.</p>
-                </button>
-            </div>
-        </div>
-    );
-}
-
-function RiderListView({ onSelectRider, onBack }: { onSelectRider: (id: string) => void, onBack: () => void }) {
-    const [riders, setRiders] = useState<ApiRider[]>([]);
+function App() {
+    const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
+    const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2026);
-    const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
+    const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
-    useEffect(() => {
-        const loadRidersForSeason = async () => {
-            try {
-                setError(null);
-                setIsLoading(true);
-                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear, selectedCategory);
-                // Ordenar por número (ascendente). Si no hay número, poner al final (999).
-                setRiders(fetchedRiders.sort((a, b) => {
-                    const numA = a.current_career_step?.number || 999;
-                    const numB = b.current_career_step?.number || 999;
-                    return numA - numB;
-                }));
-            } catch (err: any) {
-                setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
-            } finally {
-                setIsLoading(false);
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            // Se añade un parámetro a la URL para evitar problemas de caché
+            const url = `${SHEET_URL}&_=${new Date().getTime()}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Error al obtener los datos (código ${response.status}).`);
             }
-        };
-        loadRidersForSeason();
-    }, [selectedSeasonYear, selectedCategory]);
-
-    return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-            <div className="flex flex-col space-y-6 mb-6">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
-                            &larr; Volver
-                        </button>
-                        <h2 className="font-orbitron text-2xl text-white">Parrilla</h2>
-                    </div>
-                    <select
-                        value={selectedSeasonYear}
-                        onChange={(e) => {
-                            setIsLoading(true);
-                            setSelectedSeasonYear(Number(e.target.value));
-                        }}
-                        className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
-                        aria-label="Seleccionar temporada"
-                    >
-                        <option value="2026">Temporada 2026</option>
-                        <option value="2025">Temporada 2025</option>
-                    </select>
-                </div>
-
-                <div className="flex flex-wrap justify-center gap-2">
-                    {['MotoGP', 'Moto2', 'Moto3'].map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-4 py-2 rounded-full font-bold text-sm transition-colors ${
-                                selectedCategory === cat 
-                                ? 'motogp-red-bg text-white' 
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                            }`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {isLoading && (
-                <div className="text-center py-8">
-                    <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedCategory} {selectedSeasonYear}...</p>
-                </div>
-            )}
-
-            {error && <p className="text-center text-red-400 py-8">{error}</p>}
-            
-            {!isLoading && !error && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {riders.map(rider => (
-                        <RiderCard key={rider.id} rider={rider} onSelect={() => onSelectRider(rider.id)} />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-interface RiderCardProps {
-    rider: ApiRider;
-    onSelect: () => void;
-}
-
-const RiderCard: React.FC<RiderCardProps> = ({ rider, onSelect }) => {
-    const profilePic = rider.current_career_step?.pictures?.profile?.main;
-    return (
-        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full border border-gray-800 hover:border-red-500/50">
-            <div className="relative h-48 bg-gray-800">
-                {profilePic ? (
-                    <img src={profilePic} alt={`${rider.name} ${rider.surname}`} className="w-full h-full object-cover object-top" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                        <UserIcon className="w-16 h-16 text-gray-600" />
-                    </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
-                <div className="absolute bottom-0 left-0 p-3 w-full">
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                            <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
-                            <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate text-sm md:text-base">
-                                {rider.name} {rider.surname}
-                            </h3>
-                        </div>
-                    </div>
-                </div>
-                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md border border-white/10">
-                    {rider.current_career_step?.number}
-                </div>
-            </div>
-        </button>
-    );
-}
-
-function RiderDetailView({ riderId, onBack, data }: { riderId: string; onBack: () => void; data: MotoGpData | null }) {
-    const [rider, setRider] = useState<ApiRider | null>(null);
-    const [stats, setStats] = useState<RiderStats | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [showFullStatsModal, setShowFullStatsModal] = useState(false);
-    const [showSeasonStatsModal, setShowSeasonStatsModal] = useState(false);
-
-    useEffect(() => {
-        const loadRiderData = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
-                
-                // 1. Cargar detalles básicos
-                const details = await fetchRiderDetails(riderId);
-                setRider(details);
-
-                // 2. Cargar estadísticas si tenemos el legacy_id
-                if (details.legacy_id) {
-                    try {
-                        const statistics = await fetchRiderStats(details.legacy_id);
-                        setStats(statistics);
-                    } catch (statsErr) {
-                        console.warn("No se pudieron cargar las estadísticas extendidas", statsErr);
-                    }
-                }
-            } catch (err: any) {
-                setError(err.message || 'No se pudo cargar la ficha del piloto.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadRiderData();
-    }, [riderId]);
-
-    if (isLoading) {
-        return (
-             <div className="text-center py-12">
-                <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                <p className="mt-4 text-gray-300 font-orbitron">Cargando datos del piloto...</p>
-            </div>
-        );
-    }
-    
-    if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
-    if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
-
-    const { name, surname, birth_date, birth_city, country, physical_attributes, career } = rider;
-    const current_career_step = career?.find(c => c.current);
-    
-    // Calcular edad dinámicamente
-    const calculateAge = (birthDateString: string): number => {
-        if (!birthDateString) return 0;
-        const birthDate = new Date(birthDateString);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
+            const text = await response.text();
+            setRawCsv(text);
+            const data = parseCsvData(text);
+            setMotoGpData(data);
+        } catch (err: any) {
+            setError(err.message || 'Ocurrió un error al procesar los datos.');
+        } finally {
+            setIsLoading(false);
         }
-        return age;
-    };
-    const dynamicAge = calculateAge(birth_date);
-
-
-    if (!current_career_step) {
-        return (
-             <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-                 <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                    &larr; Volver a la lista
-                </button>
-                <p className="text-center text-yellow-400 py-8">No se encontró información de la temporada actual para este piloto ({name} {surname}).</p>
-             </div>
-        );
-    }
-
-    const { team, pictures } = current_career_step;
-
-    return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                &larr; Volver a la lista
-            </button>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Columna Izquierda: Imágenes */}
-                <div className="lg:col-span-1 space-y-6">
-                     <div className="relative rounded-lg overflow-hidden shadow-2xl border border-gray-700">
-                        {pictures.profile.main ? (
-                            <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full object-cover" />
-                        ) : (
-                            <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
-                                <UserIcon className="w-20 h-20 text-gray-600"/>
-                            </div>
-                        )}
-                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
-                             <h2 className="font-orbitron text-2xl text-white text-center">{name} {surname}</h2>
-                         </div>
-                     </div>
-                     
-                     <div className="grid grid-cols-2 gap-4">
-                        {pictures.bike.main && (
-                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
-                                <img src={pictures.bike.main} alt="Moto" className="w-full h-auto" />
-                                <p className="text-xs text-center text-gray-400 mt-1">Moto</p>
-                            </div>
-                        )}
-                        {pictures.helmet.main && (
-                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
-                                <img src={pictures.helmet.main} alt="Casco" className="w-full h-auto" />
-                                <p className="text-xs text-center text-gray-400 mt-1">Casco</p>
-                            </div>
-                        )}
-                     </div>
-                </div>
-
-                {/* Columna Derecha: Datos y Estadísticas */}
-                <div className="lg:col-span-2">
-                    <div className="flex items-start justify-between mb-6 border-b border-gray-700 pb-4">
-                        <div className="flex items-center gap-4">
-                            <img src={country.flag} alt={country.name} className="w-16 h-10 object-cover rounded-md shadow-md border border-gray-600"/>
-                            <div>
-                                <h1 className="font-orbitron text-4xl sm:text-5xl text-white uppercase tracking-wider">{name} <span className="text-red-600">{surname}</span></h1>
-                                <p className="text-gray-400 text-lg">{team.name}</p>
-                            </div>
-                        </div>
-                        <div className="text-right hidden sm:block">
-                             <span className="font-orbitron text-6xl text-white/10 font-bold select-none">#{current_career_step.number}</span>
-                        </div>
-                    </div>
-
-                    {/* Estadísticas Clave con Desglose */}
-                    {stats && (
-                        <>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-                                <StatBoxWithBreakdown label="Victorias" total={stats.grand_prix_victories?.total} categories={stats.grand_prix_victories?.categories} />
-                                <StatBoxWithBreakdown label="Podios" total={stats.podiums?.total} categories={stats.podiums?.categories} />
-                                <StatBoxWithBreakdown label="Poles" total={stats.poles?.total} categories={stats.poles?.categories} />
-                                <StatBoxWithBreakdown label="Títulos" total={stats.world_championship_wins?.total} categories={stats.world_championship_wins?.categories} isGold />
-                            </div>
-                            <div className="flex flex-wrap gap-4 mb-8">
-                                <button 
-                                    onClick={() => setShowFullStatsModal(true)}
-                                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors border border-gray-600 flex-1 text-center"
-                                >
-                                    Más estadísticas
-                                </button>
-                                <button 
-                                    onClick={() => setShowSeasonStatsModal(true)}
-                                    className="motogp-red-bg hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex-1 text-center"
-                                >
-                                    Histórico posición
-                                </button>
-                            </div>
-                        </>
-                    )}
-                    
-                    {data && (
-                        <div className="mb-8">
-                            <h3 className="font-orbitron text-lg text-white mb-4 uppercase">Temporada Actual</h3>
-                            <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-64">
-                                <CurrentSeasonChart results={data.motogpResults} riderSurname={surname} riderName={name} />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InfoBlock title="Datos Personales">
-                            <InfoItem label="Nacionalidad" value={country.name} />
-                            <InfoItem label="Ciudad Natal" value={birth_city} />
-                            <InfoItem label="Fecha de Nacimiento" value={new Date(birth_date).toLocaleDateString('es-ES')} />
-                            <InfoItem label="Edad" value={`${dynamicAge} años`} />
-                            {physical_attributes && (
-                                <>
-                                    <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
-                                    <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
-                                </>
-                            )}
-                        </InfoBlock>
-
-                        <InfoBlock title="Equipo & Máquina">
-                            <InfoItem label="Dorsal" value={`#${current_career_step.number}`} />
-                            <InfoItem label="Equipo" value={team.name} />
-                            <InfoItem label="Constructor" value={team.constructor.name} />
-                            <InfoItem label="Categoría" value={current_career_step.category.name} />
-                             {team.picture && (
-                                 <div className="mt-4 bg-white/5 p-2 rounded-lg">
-                                     <img src={team.picture} alt={team.name} className="w-full h-auto" />
-                                 </div>
-                             )}
-                        </InfoBlock>
-                    </div>
-                </div>
-            </div>
-            
-            {/* Modals */}
-            {showFullStatsModal && stats && (
-                <FullStatsModal stats={stats} onClose={() => setShowFullStatsModal(false)} />
-            )}
-            {showSeasonStatsModal && rider.legacy_id && (
-                <SeasonStatsModal legacyId={rider.legacy_id} onClose={() => setShowSeasonStatsModal(false)} />
-            )}
-        </div>
-    );
-}
-
-function CurrentSeasonChart({ results, riderSurname, riderName }: { results: CircuitResult[], riderSurname: string, riderName: string }) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const resizeObserver = new ResizeObserver(entries => {
-            if (entries[0]) {
-                const { width, height } = entries[0].contentRect;
-                setDimensions({ width, height });
-            }
-        });
-        resizeObserver.observe(container);
-        return () => resizeObserver.disconnect();
     }, []);
 
-<<<<<<< HEAD
-    const chartData = useMemo(() => {
-        if (!results || results.length === 0) return [];
+    useEffect(() => {
+        fetchData();
         
-        return results.map(circuitResult => {
-            const circuitCode = circuitResult.circuit.substring(0, 3).toUpperCase();
-            
-            const isMatch = (driverNameInCsv: string) => {
-                const d = driverNameInCsv.toLowerCase();
-                const s = riderSurname.toLowerCase();
-                const n = riderName.toLowerCase();
-                
-                // Manejo específico para colisiones de apellidos comunes
-                if (s === 'marquez') {
-                    if (n === 'marc') return d.includes('m. marquez') || d.includes('m.marquez');
-                    if (n === 'alex') return d.includes('a. marquez') || d.includes('a.marquez');
-                }
-                if (s === 'fernandez') {
-                     if (n === 'raul') return d.includes('r. fernandez') || d.includes('r.fernandez');
-                     if (n === 'augusto') return d.includes('a. fernandez') || d.includes('a.fernandez');
-                }
-                
-                // Fallback por defecto: si contiene el apellido
-                return d.includes(s);
-            }
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // Usamos la variable de entorno BASE_URL de Vite para construir la ruta correcta.
+                // Se añade optional chaining y un fallback para entornos donde vite no inyecta las variables.
+                const baseUrl = import.meta.env?.BASE_URL ?? '/PorraGP-FULL-2025/';
+                const swUrl = `${baseUrl}service-worker.js`;
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => {
+                        console.log('ServiceWorker registrado correctamente en:', registration.scope);
+                    })
+                    .catch(err => {
+                        console.error('Error en el registro de ServiceWorker:', err);
+                    });
+            });
+        }
 
-            // Buscar resultados del piloto usando la función de coincidencia inteligente
-            const sprintResult = circuitResult.sprint.find(r => isMatch(r.driver));
-            const raceResult = circuitResult.race.find(r => isMatch(r.driver));
-            
-            return {
-                circuit: circuitCode,
-                sprintPoints: sprintResult ? sprintResult.points : 0,
-                racePoints: raceResult ? raceResult.points : 0
-            };
-        });
-    }, [results, riderSurname, riderName]);
+    }, [fetchData]);
 
-    if (chartData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Sin datos de temporada</div>;
+    const handleSetTab = (tab: Tab) => {
+        setActiveTab(tab);
+        setIsMenuOpen(false);
+    }
 
-    const PADDING = { top: 20, right: 20, bottom: 30, left: 30 };
-    const WIDTH = dimensions.width;
-    const HEIGHT = dimensions.height;
-    const CHART_WIDTH = WIDTH - PADDING.left - PADDING.right;
-    const CHART_HEIGHT = HEIGHT - PADDING.top - PADDING.bottom;
-    const MAX_POINTS = 25;
+    const renderContent = () => {
+        // Redirige a la pestaña de Live Timing si se solicita específicamente
+        if (activeTab === 'livetiming') {
+            return <LiveTimingTab />;
+        }
+        if (isLoading) {
+            return (
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                    <p className="mt-4 text-lg text-gray-300 font-orbitron">Arrancando motores...</p>
+                </div>
+            );
+        }
+        if (error) {
+            return <p className="text-center text-red-400">{error}</p>;
+        }
+        if (!motoGpData) {
+            return <p className="text-center text-gray-400">No se han podido cargar los datos.</p>;
+        }
 
-    const xScale = (index: number) => PADDING.left + (index / (chartData.length - 1 || 1)) * CHART_WIDTH;
-    const yScale = (points: number) => PADDING.top + CHART_HEIGHT - (points / MAX_POINTS) * CHART_HEIGHT;
-
-    const sprintPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.sprintPoints)}`).join(' ');
-    const racePath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.racePoints)}`).join(' ');
+        switch (activeTab) {
+            case 'dashboard':
+                return <DashboardTab data={motoGpData} setActiveTab={setActiveTab} />;
+            case 'standings':
+                return <StandingsTab data={motoGpData} />;
+            case 'statistics':
+                return <StatisticsTab data={motoGpData} />;
+            case 'circuits':
+                 return <CircuitsTab data={motoGpData} />;
+            case 'participantes':
+                 return <ParticipantesTab data={motoGpData} />;
+            case 'motogp_results':
+                 return <MotoGpResultsTab data={motoGpData} />;
+             case 'votar':
+                return <VotarTab />;
+            case 'noticias':
+                return <NewsTab />;
+            case 'info_prueba':
+                return <InfoPruebaTab data={motoGpData} />;
+            default:
+                return null;
+        }
+    };
 
     return (
-        <div ref={containerRef} className="w-full h-full">
-            {WIDTH > 0 && (
-                <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-full overflow-visible">
-                    {/* Eje Y Grid */}
-                    {[0, 5, 10, 15, 20, 25].map(val => {
-                        const y = yScale(val);
-                        return (
-                            <g key={val}>
-                                <line x1={PADDING.left} x2={WIDTH - PADDING.right} y1={y} y2={y} stroke="#374151" strokeDasharray="2" />
-                                <text x={PADDING.left - 5} y={y + 3} fill="#9CA3AF" fontSize="10" textAnchor="end">{val}</text>
-                            </g>
-                        );
-                    })}
+        <div className={`min-h-screen w-full flex flex-col ${activeTab !== 'livetiming' ? 'p-4 sm:p-8' : ''}`}>
+            <header className={`w-full max-w-7xl mx-auto flex justify-between items-center mb-8 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
+                <button 
+                    onClick={() => handleSetTab('dashboard')} 
+                    className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
+                >
+                    <span className="transition-colors duration-300 group-hover:motogp-red">Porra</span>
+                    <span className="motogp-red transition-colors duration-300 group-hover:text-white">GP</span>
+                </button>
+                <RefreshButton onClick={fetchData} isLoading={isLoading} />
+            </header>
 
-                    {/* Eje X Labels (Circuitos) */}
-                    {chartData.map((d, i) => (
-                        <text 
-                            key={i} 
-                            x={xScale(i)} 
-                            y={HEIGHT - 5} 
-                            fill="#9CA3AF" 
-                            fontSize="10" 
-                            textAnchor="end" 
-                            transform={`rotate(-45, ${xScale(i)}, ${HEIGHT - 5})`}
+            <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
+                <div className={`flex justify-between items-center ${activeTab === 'livetiming' ? 'px-4 sm:px-8 py-4' : 'mb-8 border-b border-gray-700'}`}>
+                    {/* Mobile Menu Button & Dropdown */}
+                    <div className={`sm:hidden relative ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
+                        <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
+                             <MenuIcon className="w-6 h-6" />
+                        </button>
+                        {isMenuOpen && (
+                            <>
+                                {/* Backdrop to close menu on click outside */}
+                                <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                                <div
+                                    className="absolute left-0 mt-2 w-56 origin-top-left rounded-md shadow-lg card-bg ring-1 ring-black ring-opacity-5 z-50"
+                                >
+                                    <div className="py-1" role="menu" aria-orientation="vertical">
+                                        {TABS.map(({name, tab}) => (
+                                            <button
+                                                key={tab}
+                                                onClick={() => handleSetTab(tab)}
+                                                className={`${
+                                                    activeTab === tab ? 'motogp-red bg-gray-900/50' : 'text-gray-300'
+                                                } block w-full text-left px-4 py-4 text-lg hover:bg-gray-700/80 transition-colors`}
+                                                role="menuitem"
+                                            >
+                                                {name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Desktop Tabs */}
+                    <nav className={`hidden sm:flex -mb-px space-x-6 overflow-x-auto ${activeTab === 'livetiming' ? 'hidden' : ''}`} aria-label="Tabs">
+                         {TABS.map(({ name, tab }) => (
+                            <TabButton
+                                key={tab}
+                                name={name}
+                                tab={tab}
+                                activeTab={activeTab}
+                                setActiveTab={handleSetTab}
+                            />
+                        ))}
+                    </nav>
+                     {activeTab === 'livetiming' ? (
+                        <button
+                            onClick={() => handleSetTab('dashboard')}
+                            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap"
                         >
-                            {d.circuit}
-                        </text>
-                    ))}
+                            &larr; Volver
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setActiveTab('livetiming')}
+                            className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
+                        >
+                            LiveTiming
+                        </button>
+                    )}
+                </div>
+                {renderContent()}
+            </main>
+            
+            <footer className={`w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
+                 <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
+            </footer>
 
-                    {/* Líneas */}
-                    <path d={sprintPath} fill="none" stroke="#22c55e" strokeWidth="2" />
-                    <path d={racePath} fill="none" stroke="#ef4444" strokeWidth="2" />
-
-                    {/* Puntos */}
-                    {chartData.map((d, i) => (
-                        <g key={i}>
-                            <circle cx={xScale(i)} cy={yScale(d.sprintPoints)} r="3" fill="#22c55e" />
-                            <circle cx={xScale(i)} cy={yScale(d.racePoints)} r="3" fill="#ef4444" />
-                        </g>
-                    ))}
-                    
-                    {/* Leyenda */}
-                    <g transform={`translate(${WIDTH - 80}, 0)`}>
-                        <rect width="10" height="10" fill="#ef4444" rx="2" />
-                        <text x="15" y="9" fill="#ef4444" fontSize="10" fontWeight="bold">RACE</text>
-                        <rect y="15" width="10" height="10" fill="#22c55e" rx="2" />
-                        <text x="15" y="24" fill="#22c55e" fontSize="10" fontWeight="bold">SPR</text>
-                    </g>
-                </svg>
+             <ChatBubbleButton onClick={() => setIsChatOpen(true)} />
+            {isChatOpen && motoGpData && (
+                <ChatWindow
+                    onClose={() => setIsChatOpen(false)}
+                    data={motoGpData}
+                    rawCsv={rawCsv}
+                />
             )}
         </div>
     );
 }
 
-function StatBoxWithBreakdown({ label, total, categories, isGold }: { label: string; total: number | undefined; categories: any[] | undefined; isGold?: boolean }) {
-    const safeTotal = total ?? 0;
-    
-    const breakdownText = useMemo(() => {
-        if (!categories || categories.length === 0) return null;
-
-        // Función auxiliar para determinar el orden
-        const getCategoryOrder = (name: string) => {
-            if (name.includes('125')) return 1;
-            if (name.includes('Moto3')) return 2;
-            if (name.includes('250')) return 3;
-            if (name.includes('Moto2')) return 4;
-            if (name.includes('500')) return 5;
-            if (name.includes('MotoGP')) return 6;
-            return 7; 
-        };
-
-        // Ordenar las categorías: 125cc -> Moto3 -> 250cc -> Moto2 -> 500cc -> MotoGP
-        const sortedCategories = [...categories].sort((a, b) => {
-             return getCategoryOrder(a.category.name) - getCategoryOrder(b.category.name);
-        });
-
-        // Mapear nombres largos a códigos cortos
-        return sortedCategories.map((cat: any) => {
-            const name = cat.category.name || '';
-            let shortCode = '';
-            if (name.includes('MotoGP')) shortCode = 'MGP';
-            else if (name.includes('Moto2')) shortCode = 'M2';
-            else if (name.includes('Moto3')) shortCode = 'M3';
-            else if (name.includes('125')) shortCode = '125';
-            else if (name.includes('250')) shortCode = '250';
-            else if (name.includes('500')) shortCode = '500';
-            else shortCode = name.substring(0, 3).toUpperCase();
-            
-            return `${shortCode}-${cat.count}`;
-        }).join(' ');
-    }, [categories]);
-
-    return (
-        <div className={`p-4 rounded-lg text-center border flex flex-col justify-center items-center ${isGold ? 'bg-yellow-900/20 border-yellow-600/50' : 'bg-gray-800 border-gray-700'}`}>
-            <p className={`text-3xl font-orbitron font-bold ${isGold ? 'text-yellow-500' : 'text-white'}`}>{safeTotal}</p>
-            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{label}</p>
-            {breakdownText && (
-                <p className="text-[10px] text-gray-500 mt-2 font-mono">{breakdownText}</p>
-=======
 export default App;
->>>>>>> 5e55e5db80ef275d7cb0e2af7240d03da966d253

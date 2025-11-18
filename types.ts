@@ -12,6 +12,14 @@ declare global {
   }
 }
 
+// Fix: Manually define process to fix "process is not defined" errors during build
+declare var process: {
+  env: {
+    API_KEY: string;
+    [key: string]: string | undefined;
+  }
+};
+
 export interface Race {
   circuit: string;
   date: string;

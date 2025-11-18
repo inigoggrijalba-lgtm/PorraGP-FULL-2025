@@ -4,13 +4,21 @@
 declare global {
   interface ImportMetaEnv {
     readonly BUILD_TIMESTAMP: string;
-    // fix: Add BASE_URL to fix TypeScript error in src/App.tsx
+    // fix: Add BASE_URL to fix TypeScript error in App.tsx
     readonly BASE_URL: string;
   }
   interface ImportMeta {
     readonly env: ImportMetaEnv;
   }
 }
+
+// Fix: Manually define process to fix "process is not defined" errors during build
+declare var process: {
+  env: {
+    API_KEY: string;
+    [key: string]: string | undefined;
+  }
+};
 
 export interface Race {
   circuit: string;
