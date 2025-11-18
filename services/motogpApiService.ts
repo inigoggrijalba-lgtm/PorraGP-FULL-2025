@@ -1,3 +1,4 @@
+
 import type { CircuitResult, RaceResult, LiveTimingResponse, ApiSeason, ApiCategory, ApiRider } from '../types';
 
 const PROXY_URL = 'https://corsproxy.io/?';

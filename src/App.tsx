@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails } from './services/motogpApiService';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming } from './services/motogpApiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon } from './components/icons';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from './components/icons';
 
 declare var html2canvas: any;
 
@@ -141,6 +142,7 @@ const parseCsvData = (csvText: string): MotoGpData => {
         }
     });
 
+    // fix: Corrected sorting property from 'totalPoints' to 'totalVotes'.
     driverVoteCounts.sort((a, b) => b.totalVotes - a.totalVotes);
 
     // --- Resultados Oficiales MotoGP ---
@@ -187,7 +189,7 @@ const parseCsvData = (csvText: string): MotoGpData => {
 };
 
 
-type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_prueba';
+type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_pilotos';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
@@ -198,7 +200,7 @@ const TABS: { name: string; tab: Tab }[] = [
     { name: "Votos pilotos", tab: "participantes" },
     { name: "Estadísticas", tab: "statistics" },
     { name: "Noticias", tab: "noticias" },
-    { name: "Info Prueba", tab: "info_prueba" },
+    { name: "Info Pilotos", tab: "info_pilotos" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -307,8 +309,8 @@ const App: React.FC = () => {
                 return <LiveTimingTab />;
             case 'noticias':
                 return <NewsTab />;
-            case 'info_prueba':
-                return <InfoPruebaTab />;
+            case 'info_pilotos':
+                return <InfoPilotosTab />;
             default:
                 return null;
         }
@@ -1106,25 +1108,107 @@ const VotarTab: React.FC = () => {
 };
 
 const LiveTimingTab: React.FC = () => {
-    const liveTimingUrl = "https://www.motogp.com/en/live-timing";
+    const [timingData, setTimingData] = useState<any | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [isFullScreen, setIsFullScreen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            // No establecemos isLoading a true en cada búsqueda para evitar parpadeos
+            const data = await fetchLiveTiming();
+            setTimingData(data);
+            setError(null);
+        } catch (err: any) {
+            setError(err.message || 'No se pudo cargar el Live Timing.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+        const intervalId = setInterval(fetchData, 10000); // Fetch every 10 seconds
+        return () => clearInterval(intervalId);
+    }, [fetchData]);
+
+    const handleFullScreen = () => {
+        if (!containerRef.current) return;
+        if (!document.fullscreenElement) {
+            containerRef.current.requestFullscreen().catch(err => {
+                alert(`Error al intentar activar el modo de pantalla completa: ${err.message} (${err.name})`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    };
+    
+    useEffect(() => {
+        const handleFullScreenChange = () => {
+            setIsFullScreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullScreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    }, []);
+
+    // La API puede devolver un array vacío o un objeto con una propiedad 'riders'
+    const riders = timingData?.riders || (Array.isArray(timingData) ? timingData : []);
+
     return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
-            <h2 className="font-orbitron text-2xl mb-4 text-white">Live Timing Oficial</h2>
-            <p className="text-gray-400 mb-6">Se muestra el Live Timing oficial de MotoGP.com. La funcionalidad puede ser limitada dentro de este marco.</p>
-            <div className="w-full h-[1000px] bg-white rounded-lg overflow-hidden">
-                 <iframe
-                    src={liveTimingUrl}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 'none' }}
-                    title="Live Timing Oficial de MotoGP"
-                    >
-                    Cargando Live Timing...
-                </iframe>
+        <div ref={containerRef} className={`card-bg p-4 sm:p-6 rounded-xl shadow-lg transition-all duration-300 ${isFullScreen ? 'h-full w-full fixed inset-0 z-50 overflow-y-auto' : 'relative'}`}>
+             <div className="flex justify-between items-center mb-4">
+                <h2 className="font-orbitron text-2xl text-white">Live Timing</h2>
+                <div className='flex items-center gap-2'>
+                    {isLoading && <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-red-500"></div>}
+                    <button onClick={handleFullScreen} className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors" aria-label="Pantalla completa">
+                        {isFullScreen ? <ArrowsPointingInIcon className="w-5 h-5" /> : <ArrowsPointingOutIcon className="w-5 h-5" />}
+                    </button>
+                </div>
             </div>
+            
+            {error && <p className="text-center text-red-400 py-8">{error}</p>}
+
+            {!error && riders.length > 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-300">
+                        <thead className="text-xs text-red-400 uppercase bg-gray-900/50">
+                            <tr>
+                                <th className="px-2 py-3 text-center">Pos</th>
+                                <th className="px-6 py-3">Piloto</th>
+                                <th className="px-2 py-3 text-center">Gap</th>
+                                <th className="px-2 py-3 text-center">Intervalo</th>
+                                <th className="px-2 py-3 text-center">Última Vuelta</th>
+                                <th className="px-2 py-3 text-center">Mejor Vuelta</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {riders.map((rider: any) => (
+                                <tr key={rider.number} className="border-b border-gray-700 hover:bg-gray-800/50">
+                                    <td className="px-2 py-3 text-center font-bold">{rider.position}</td>
+                                    <td className="px-6 py-4 font-bold text-white flex items-center whitespace-nowrap">
+                                        <span className="w-1 h-4 mr-3 rounded-full" style={{ backgroundColor: getRiderColor(rider.name) }}></span>
+                                        <span className='mr-2 text-gray-400'>{rider.number}</span>
+                                        <span>{rider.name}</span>
+                                    </td>
+                                    <td className="px-2 py-3 text-center font-mono">{rider.gap}</td>
+                                    <td className="px-2 py-3 text-center font-mono">{rider.interval}</td>
+                                    <td className="px-2 py-3 text-center font-mono">{rider.last_lap}</td>
+                                    <td className="px-2 py-3 text-center font-mono text-violet-400">{rider.best_lap}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                !isLoading && !error && <p className="text-center text-gray-400 py-8">No hay sesión activa o datos disponibles en este momento.</p>
+            )}
         </div>
     );
 };
+
 
 const NewsTab: React.FC = () => {
     const [articles, setArticles] = useState<Article[]>([]);
@@ -1590,75 +1674,81 @@ const ScreenshotModal: React.FC<{ imageDataUrl: string; onClose: () => void; }> 
     );
 };
 
-const InfoPruebaTab: React.FC = () => {
+const InfoPilotosTab: React.FC = () => {
     const [riders, setRiders] = useState<ApiRider[]>([]);
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [currentSeasonYear, setCurrentSeasonYear] = useState<number | null>(null);
-
+    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2025);
 
     useEffect(() => {
-        const loadCurrentSeasonAndRiders = async () => {
+        const loadRiders = async () => {
             try {
                 setError(null);
                 setIsLoading(true);
-
-                const fetchedSeasons = await fetchSeasons();
-                const currentSeason = fetchedSeasons.find(s => s.current);
-
-                if (!currentSeason) {
-                    throw new Error('No se pudo determinar la temporada actual.');
-                }
-                
-                setCurrentSeasonYear(currentSeason.year);
-                
-                const fetchedRiders = await fetchRidersBySeason(currentSeason.year);
+                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear);
                 setRiders(fetchedRiders.sort((a, b) => a.surname.localeCompare(b.surname)));
-
             } catch (err: any) {
-                setError(err.message || 'No se pudieron cargar los datos de la temporada.');
+                setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
+                setRiders([]); // Limpiar pilotos en caso de error
             } finally {
                 setIsLoading(false);
             }
         };
-        loadCurrentSeasonAndRiders();
-    }, []);
+        loadRiders();
+    }, [selectedSeasonYear]);
 
     if (selectedRiderId) {
         return <RiderDetailView riderId={selectedRiderId} onBack={() => setSelectedRiderId(null)} />;
     }
 
+    const seasonYears = [2025, 2026];
+
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h2 className="font-orbitron text-2xl text-white">Parrilla Actual de MotoGP</h2>
-                 {currentSeasonYear && !isLoading && (
-                    <span className="bg-gray-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg">
-                        Temporada {currentSeasonYear}
-                    </span>
-                 )}
+                <h2 className="font-orbitron text-2xl text-white">Parrilla de MotoGP</h2>
+                <div className="flex items-center gap-2 bg-gray-800 p-1 rounded-lg">
+                    {seasonYears.map(year => (
+                        <button
+                            key={year}
+                            onClick={() => setSelectedSeasonYear(year)}
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${
+                                selectedSeasonYear === year
+                                ? 'motogp-red-bg text-white shadow'
+                                : 'text-gray-300 hover:bg-gray-700'
+                            }`}
+                        >
+                            {year}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {isLoading && (
                 <div className="text-center py-8">
                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla actual...</p>
+                    <p className="mt-4 text-gray-300">Cargando parrilla {selectedSeasonYear}...</p>
                 </div>
             )}
 
             {error && <p className="text-center text-red-400 py-8">{error}</p>}
             
-            {!isLoading && !error && (
+            {!isLoading && !error && riders.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {riders.map(rider => (
                         <RiderCard key={rider.id} rider={rider} onSelect={() => setSelectedRiderId(rider.id)} />
                     ))}
                 </div>
             )}
+
+            {!isLoading && !error && riders.length === 0 && (
+                 <p className="text-center text-gray-400 py-8">No se encontraron pilotos para la temporada {selectedSeasonYear}.</p>
+            )}
         </div>
     );
 };
+
 
 const RiderCard: React.FC<{ rider: ApiRider; onSelect: () => void; }> = ({ rider, onSelect }) => {
     const profilePic = rider.current_career_step?.pictures?.profile?.main;
@@ -1720,8 +1810,7 @@ const RiderDetailView: React.FC<{ riderId: string; onBack: () => void; }> = ({ r
     if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
     if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
 
-    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, career } = rider;
-    const current_career_step = career?.find(c => c.current);
+    const { name, surname, birth_date, birth_city, country, years_old, physical_attributes, current_career_step } = rider;
 
     if (!current_career_step) {
         return (
