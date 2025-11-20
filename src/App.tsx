@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat } from './types';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -188,18 +187,17 @@ const parseCsvData = (csvText: string): MotoGpData => {
 };
 
 
-type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'motogp_results' | 'votar' | 'livetiming' | 'noticias' | 'info_prueba';
+type Tab = 'dashboard' | 'standings' | 'statistics' | 'circuits' | 'participantes' | 'votar' | 'livetiming' | 'noticias' | 'motogp_data';
 
 const TABS: { name: string; tab: Tab }[] = [
     { name: "Inicio", tab: "dashboard" },
     { name: "Clasificación Porra", tab: "standings" },
     { name: "Votar", tab: "votar" },
     { name: "Resultados Porra", tab: "circuits" },
-    { name: "Resultados MGP", tab: "motogp_results" },
+    { name: "MotoGP Data", tab: "motogp_data" },
     { name: "Votos pilotos", tab: "participantes" },
     { name: "Estadísticas", tab: "statistics" },
     { name: "Noticias", tab: "noticias" },
-    { name: "Info Prueba", tab: "info_prueba" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -624,41 +622,6 @@ function VotesChart({ data }: { data: { driver: string; count: number }[] }) {
     );
 }
 
-function ResultsTable({ results }: { results: RaceResult[] }) {
-    if (!results || results.length === 0) {
-        return <p className="text-gray-500 text-sm italic">Resultados no disponibles.</p>;
-    }
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-300">
-                <thead className="text-xs text-gray-400 uppercase bg-gray-800/50">
-                    <tr>
-                        <th className="px-4 py-2 text-center w-12">Pos</th>
-                        <th className="px-4 py-2">Piloto</th>
-                        <th className="px-4 py-2 text-center">Pts</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {results.map((res) => (
-                        <tr key={res.position} className="border-b border-gray-700">
-                            <td className="px-4 py-3 text-center">
-                                <span className={`inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold 
-                                    ${res.position === 1 ? 'bg-yellow-500 text-black' : 
-                                      res.position === 2 ? 'bg-gray-400 text-black' : 
-                                      res.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-white'}`}>
-                                    {res.position}
-                                </span>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-white">{res.driver}</td>
-                            <td className="px-4 py-3 text-center">{res.points}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
 function ChatBubbleButton({ onClick }: { onClick: () => void }) {
     return (
         <button
@@ -756,671 +719,6 @@ function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: Moto
                     <SendIcon className="w-5 h-5" />
                 </button>
             </div>
-        </div>
-    );
-}
-
-// --- INFO PRUEBA COMPONENTS ---
-
-interface RiderCardProps {
-    rider: ApiRider;
-    onSelect: () => void;
-}
-
-const RiderCard: React.FC<RiderCardProps> = ({ rider, onSelect }) => {
-    const profilePic = rider.current_career_step?.pictures?.profile?.main;
-    return (
-        <button onClick={onSelect} className="card-bg rounded-lg shadow-md overflow-hidden group transform hover:-translate-y-1 transition-transform duration-300 text-left w-full border border-gray-800 hover:border-red-500/50">
-            <div className="relative h-48 bg-gray-800">
-                {profilePic ? (
-                    <img src={profilePic} alt={`${rider.name} ${rider.surname}`} className="w-full h-full object-cover object-top" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                        <UserIcon className="w-16 h-16 text-gray-600" />
-                    </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
-                <div className="absolute bottom-0 left-0 p-3 w-full">
-                    <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                            <img src={rider.country.flag} alt={rider.country.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
-                            <h3 className="font-bold text-white group-hover:motogp-red transition-colors truncate text-sm md:text-base">
-                                {rider.name} {rider.surname}
-                            </h3>
-                        </div>
-                    </div>
-                </div>
-                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white font-orbitron text-xl font-bold px-2 py-1 rounded-md border border-white/10">
-                    {rider.current_career_step?.number}
-                </div>
-            </div>
-        </button>
-    );
-}
-
-type InfoView = 'menu' | 'riders_list' | 'events_list' | 'rider_detail';
-
-function InfoMenu({ onSelectView }: { onSelectView: (view: InfoView) => void }) {
-    return (
-        <div className="animate-fade-in">
-            <h2 className="font-orbitron text-3xl text-white text-center mb-8">Datos MotoGP™</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <button 
-                    onClick={() => onSelectView('riders_list')}
-                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
-                >
-                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
-                        <UserIcon className="w-16 h-16 text-red-500" />
-                    </div>
-                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Pilotos</h2>
-                    <p className="text-gray-400 mt-2 text-center">Consulta la parrilla, fichas y estadísticas de los pilotos.</p>
-                </button>
-
-                <button 
-                    onClick={() => onSelectView('events_list')}
-                    className="card-bg p-8 rounded-xl shadow-lg group hover:bg-gray-800/80 transition-all duration-300 flex flex-col items-center justify-center h-64 border border-gray-700 hover:border-red-500"
-                >
-                    <div className="bg-red-900/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
-                        <FlagIcon className="w-16 h-16 text-red-500" />
-                    </div>
-                    <h2 className="font-orbitron text-3xl text-white group-hover:text-red-500 transition-colors">Eventos</h2>
-                    <p className="text-gray-400 mt-2 text-center">Calendario, circuitos y detalles de cada Gran Premio.</p>
-                </button>
-            </div>
-        </div>
-    );
-}
-
-function RiderListView({ onSelectRider, onBack }: { onSelectRider: (id: string) => void, onBack: () => void }) {
-    const [riders, setRiders] = useState<ApiRider[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedSeasonYear, setSelectedSeasonYear] = useState<number>(2026);
-    const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
-
-    useEffect(() => {
-        const loadRidersForSeason = async () => {
-            try {
-                setError(null);
-                setIsLoading(true);
-                const fetchedRiders = await fetchRidersBySeason(selectedSeasonYear, selectedCategory);
-                // Ordenar por número (ascendente). Si no hay número, poner al final (999).
-                setRiders(fetchedRiders.sort((a, b) => {
-                    const numA = a.current_career_step?.number || 999;
-                    const numB = b.current_career_step?.number || 999;
-                    return numA - numB;
-                }));
-            } catch (err: any) {
-                setError(err.message || `No se pudieron cargar los datos para la temporada ${selectedSeasonYear}.`);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadRidersForSeason();
-    }, [selectedSeasonYear, selectedCategory]);
-
-    return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-            <div className="flex flex-col space-y-6 mb-6">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
-                            &larr; Volver
-                        </button>
-                        <h2 className="font-orbitron text-2xl text-white">Parrilla</h2>
-                    </div>
-                    <select
-                        value={selectedSeasonYear}
-                        onChange={(e) => {
-                            setIsLoading(true);
-                            setSelectedSeasonYear(Number(e.target.value));
-                        }}
-                        className="bg-gray-700 text-white text-sm font-bold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
-                        aria-label="Seleccionar temporada"
-                    >
-                        <option value="2026">Temporada 2026</option>
-                        <option value="2025">Temporada 2025</option>
-                    </select>
-                </div>
-
-                <div className="flex flex-wrap justify-center gap-2">
-                    {['MotoGP', 'Moto2', 'Moto3'].map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-4 py-2 rounded-full font-bold text-sm transition-colors ${
-                                selectedCategory === cat 
-                                ? 'motogp-red-bg text-white' 
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                            }`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {isLoading && (
-                <div className="text-center py-8">
-                    <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-300">Cargando parrilla de {selectedCategory} {selectedSeasonYear}...</p>
-                </div>
-            )}
-
-            {error && <p className="text-center text-red-400 py-8">{error}</p>}
-            
-            {!isLoading && !error && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {riders.map(rider => (
-                        <RiderCard key={rider.id} rider={rider} onSelect={() => onSelectRider(rider.id)} />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function InfoItem({ label, value }: { label: string, value: string | number }) {
-    return (
-        <div className="flex justify-between text-sm items-center">
-            <span className="text-gray-500 font-medium">{label}</span>
-            <span className="font-bold text-gray-200 text-right">{value}</span>
-        </div>
-    );
-}
-
-interface InfoBlockProps {
-    title: string;
-    children?: React.ReactNode;
-}
-
-const InfoBlock: React.FC<InfoBlockProps> = ({ title, children }) => {
-    return (
-        <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
-            <h3 className="font-orbitron text-lg text-red-500 mb-4 border-b border-gray-800 pb-2 uppercase">{title}</h3>
-            <div className="space-y-3">{children}</div>
-        </div>
-    );
-}
-
-function StatBoxWithBreakdown({ label, total, categories, isGold }: { label: string; total: number | undefined; categories: any[] | undefined; isGold?: boolean }) {
-    const safeTotal = total ?? 0;
-    
-    const breakdownText = useMemo(() => {
-        if (!categories || categories.length === 0) return null;
-
-        // Función auxiliar para determinar el orden
-        const getCategoryOrder = (name: string) => {
-            if (name.includes('125')) return 1;
-            if (name.includes('Moto3')) return 2;
-            if (name.includes('250')) return 3;
-            if (name.includes('Moto2')) return 4;
-            if (name.includes('500')) return 5;
-            if (name.includes('MotoGP')) return 6;
-            return 7; 
-        };
-
-        // Ordenar las categorías: 125cc -> Moto3 -> 250cc -> Moto2 -> 500cc -> MotoGP
-        const sortedCategories = [...categories].sort((a, b) => {
-             return getCategoryOrder(a.category.name) - getCategoryOrder(b.category.name);
-        });
-
-        // Mapear nombres largos a códigos cortos
-        return sortedCategories.map((cat: any) => {
-            const name = cat.category.name || '';
-            let shortCode = '';
-            if (name.includes('MotoGP')) shortCode = 'MGP';
-            else if (name.includes('Moto2')) shortCode = 'M2';
-            else if (name.includes('Moto3')) shortCode = 'M3';
-            else if (name.includes('125')) shortCode = '125';
-            else if (name.includes('250')) shortCode = '250';
-            else if (name.includes('500')) shortCode = '500';
-            else shortCode = name.substring(0, 3).toUpperCase();
-            
-            return `${shortCode}-${cat.count}`;
-        }).join(' ');
-    }, [categories]);
-
-    return (
-        <div className={`p-4 rounded-lg text-center border flex flex-col justify-center items-center ${isGold ? 'bg-yellow-900/20 border-yellow-600/50' : 'bg-gray-800 border-gray-700'}`}>
-            <p className={`text-3xl font-orbitron font-bold ${isGold ? 'text-yellow-500' : 'text-white'}`}>{safeTotal}</p>
-            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{label}</p>
-            {breakdownText && (
-                <p className="text-[10px] text-gray-500 mt-2 font-mono">{breakdownText}</p>
-            )}
-        </div>
-    );
-}
-
-function DetailStatRow({ title, items }: { title: string; items: any[] | undefined }) {
-    if (!items || items.length === 0) return null;
-    return (
-        <div className="bg-gray-800/50 p-3 rounded border border-gray-700">
-            <h4 className="text-gray-400 text-xs uppercase mb-2">{title}</h4>
-            {items.map((item, idx) => (
-                <div key={idx} className="text-sm text-white mb-1 last:mb-0">
-                    <span className="font-bold text-red-400">{item.category.name}:</span> {item.event.season} {item.event.name}
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function FullStatsModal({ stats, onClose }: { stats: RiderStats; onClose: () => void }) {
-    return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
-            <div className="card-bg rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="font-orbitron text-xl text-white">Estadísticas Completas</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                </header>
-                <div className="p-6 overflow-y-auto space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                         <StatBoxWithBreakdown label="Carreras" total={stats.all_races?.total} categories={stats.all_races?.categories} />
-                         <StatBoxWithBreakdown label="Vueltas Rápidas" total={stats.race_fastest_laps?.total} categories={stats.race_fastest_laps?.categories} />
-                    </div>
-                    
-                    <div className="space-y-4">
-                        <DetailStatRow title="Primer Gran Premio" items={stats.first_grand_prix} />
-                        <DetailStatRow title="Primera Victoria" items={stats.first_grand_prix_victories} />
-                        <DetailStatRow title="Primer Podio" items={stats.first_podiums} />
-                        <DetailStatRow title="Primera Pole" items={stats.first_pole_positions} />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function SeasonStatsModal({ legacyId, onClose }: { legacyId: number; onClose: () => void }) {
-    const [seasonStats, setSeasonStats] = useState<RiderSeasonStat[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const data = await fetchRiderSeasonStats(legacyId);
-                setSeasonStats(data);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        load();
-    }, [legacyId]);
-
-    return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex justify-center items-center p-4" onClick={onClose}>
-            <div className="card-bg rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="font-orbitron text-xl text-white">Historial por Temporada</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                </header>
-                <div className="p-4 overflow-auto">
-                    {isLoading ? (
-                        <div className="text-center py-8 text-gray-400">Cargando historial...</div>
-                    ) : (
-                        <table className="w-full text-xs sm:text-sm text-left text-gray-300">
-                            <thead className="text-xs text-red-400 uppercase bg-gray-900/50 sticky top-0">
-                                <tr>
-                                    <th className="px-2 py-3">Año</th>
-                                    <th className="px-2 py-3">Cat</th>
-                                    <th className="px-2 py-3">Moto</th>
-                                    <th className="px-2 py-3 text-center">Pos</th>
-                                    <th className="px-2 py-3 text-center">Pts</th>
-                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Vic</th>
-                                    <th className="px-2 py-3 text-center hidden sm:table-cell">Pod</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {seasonStats.map((stat, idx) => (
-                                    <tr key={idx} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                        <td className="px-2 py-3 font-bold text-white">{stat.season}</td>
-                                        <td className="px-2 py-3">{stat.category}</td>
-                                        <td className="px-2 py-3">{stat.constructor}</td>
-                                        <td className="px-2 py-3 text-center font-bold text-white">{stat.position || '-'}</td>
-                                        <td className="px-2 py-3 text-center">{stat.points}</td>
-                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.first_position}</td>
-                                        <td className="px-2 py-3 text-center hidden sm:table-cell">{stat.podiums}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function CurrentSeasonChart({ results, riderSurname, riderName }: { results: CircuitResult[], riderSurname: string, riderName: string }) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const resizeObserver = new ResizeObserver(entries => {
-            if (entries[0]) {
-                const { width, height } = entries[0].contentRect;
-                setDimensions({ width, height });
-            }
-        });
-        resizeObserver.observe(container);
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    const chartData = useMemo(() => {
-        if (!results || results.length === 0) return [];
-        
-        return results.map(circuitResult => {
-            const circuitCode = circuitResult.circuit.substring(0, 3).toUpperCase();
-            
-            const isMatch = (driverNameInCsv: string) => {
-                const d = driverNameInCsv.toLowerCase();
-                const s = riderSurname.toLowerCase();
-                const n = riderName.toLowerCase();
-                
-                // Manejo específico para colisiones de apellidos comunes
-                if (s === 'marquez') {
-                    if (n === 'marc') return d.includes('m. marquez') || d.includes('m.marquez');
-                    if (n === 'alex') return d.includes('a. marquez') || d.includes('a.marquez');
-                }
-                if (s === 'fernandez') {
-                     if (n === 'raul') return d.includes('r. fernandez') || d.includes('r.fernandez');
-                     if (n === 'augusto') return d.includes('a. fernandez') || d.includes('a.fernandez');
-                }
-                
-                // Fallback por defecto: si contiene el apellido
-                return d.includes(s);
-            }
-
-            // Buscar resultados del piloto usando la función de coincidencia inteligente
-            const sprintResult = circuitResult.sprint.find(r => isMatch(r.driver));
-            const raceResult = circuitResult.race.find(r => isMatch(r.driver));
-            
-            return {
-                circuit: circuitCode,
-                sprintPoints: sprintResult ? sprintResult.points : 0,
-                racePoints: raceResult ? raceResult.points : 0
-            };
-        });
-    }, [results, riderSurname, riderName]);
-
-    if (chartData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Sin datos de temporada</div>;
-
-    const PADDING = { top: 20, right: 20, bottom: 30, left: 30 };
-    const WIDTH = dimensions.width;
-    const HEIGHT = dimensions.height;
-    const CHART_WIDTH = WIDTH - PADDING.left - PADDING.right;
-    const CHART_HEIGHT = HEIGHT - PADDING.top - PADDING.bottom;
-    const MAX_POINTS = 25;
-
-    const xScale = (index: number) => PADDING.left + (index / (chartData.length - 1 || 1)) * CHART_WIDTH;
-    const yScale = (points: number) => PADDING.top + CHART_HEIGHT - (points / MAX_POINTS) * CHART_HEIGHT;
-
-    const sprintPath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.sprintPoints)}`).join(' ');
-    const racePath = chartData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.racePoints)}`).join(' ');
-
-    return (
-        <div ref={containerRef} className="w-full h-full">
-            {WIDTH > 0 && (
-                <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-full overflow-visible">
-                    {/* Eje Y Grid */}
-                    {[0, 5, 10, 15, 20, 25].map(val => {
-                        const y = yScale(val);
-                        return (
-                            <g key={val}>
-                                <line x1={PADDING.left} x2={WIDTH - PADDING.right} y1={y} y2={y} stroke="#374151" strokeDasharray="2" />
-                                <text x={PADDING.left - 5} y={y + 3} fill="#9CA3AF" fontSize="10" textAnchor="end">{val}</text>
-                            </g>
-                        );
-                    })}
-
-                    {/* Eje X Labels (Circuitos) */}
-                    {chartData.map((d, i) => (
-                        <text 
-                            key={i} 
-                            x={xScale(i)} 
-                            y={HEIGHT - 5} 
-                            fill="#9CA3AF" 
-                            fontSize="10" 
-                            textAnchor="end" 
-                            transform={`rotate(-45, ${xScale(i)}, ${HEIGHT - 5})`}
-                        >
-                            {d.circuit}
-                        </text>
-                    ))}
-
-                    {/* Líneas */}
-                    <path d={sprintPath} fill="none" stroke="#22c55e" strokeWidth="2" />
-                    <path d={racePath} fill="none" stroke="#ef4444" strokeWidth="2" />
-
-                    {/* Puntos */}
-                    {chartData.map((d, i) => (
-                        <g key={i}>
-                            <circle cx={xScale(i)} cy={yScale(d.sprintPoints)} r="3" fill="#22c55e" />
-                            <circle cx={xScale(i)} cy={yScale(d.racePoints)} r="3" fill="#ef4444" />
-                        </g>
-                    ))}
-                    
-                    {/* Leyenda */}
-                    <g transform={`translate(${WIDTH - 80}, 0)`}>
-                        <rect width="10" height="10" fill="#ef4444" rx="2" />
-                        <text x="15" y="9" fill="#ef4444" fontSize="10" fontWeight="bold">RACE</text>
-                        <rect y="15" width="10" height="10" fill="#22c55e" rx="2" />
-                        <text x="15" y="24" fill="#22c55e" fontSize="10" fontWeight="bold">SPR</text>
-                    </g>
-                </svg>
-            )}
-        </div>
-    );
-}
-
-function RiderDetailView({ riderId, onBack, data }: { riderId: string; onBack: () => void; data: MotoGpData | null }) {
-    const [rider, setRider] = useState<ApiRider | null>(null);
-    const [stats, setStats] = useState<RiderStats | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [showFullStatsModal, setShowFullStatsModal] = useState(false);
-    const [showSeasonStatsModal, setShowSeasonStatsModal] = useState(false);
-
-    useEffect(() => {
-        const loadRiderData = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
-                
-                // 1. Cargar detalles básicos
-                const details = await fetchRiderDetails(riderId);
-                setRider(details);
-
-                // 2. Cargar estadísticas si tenemos el legacy_id
-                if (details.legacy_id) {
-                    try {
-                        const statistics = await fetchRiderStats(details.legacy_id);
-                        setStats(statistics);
-                    } catch (statsErr) {
-                        console.warn("No se pudieron cargar las estadísticas extendidas", statsErr);
-                    }
-                }
-            } catch (err: any) {
-                setError(err.message || 'No se pudo cargar la ficha del piloto.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadRiderData();
-    }, [riderId]);
-
-    if (isLoading) {
-        return (
-             <div className="text-center py-12">
-                <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                <p className="mt-4 text-gray-300 font-orbitron">Cargando datos del piloto...</p>
-            </div>
-        );
-    }
-    
-    if (error) return <p className="text-center text-red-400 py-8">{error}</p>;
-    if (!rider) return <p className="text-center text-gray-400 py-8">No se encontró la información del piloto.</p>;
-
-    const { name, surname, birth_date, birth_city, country, physical_attributes, career } = rider;
-    const current_career_step = career?.find(c => c.current);
-    
-    // Calcular edad dinámicamente
-    const calculateAge = (birthDateString: string): number => {
-        if (!birthDateString) return 0;
-        const birthDate = new Date(birthDateString);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        return age;
-    };
-    const dynamicAge = calculateAge(birth_date);
-
-
-    if (!current_career_step) {
-        return (
-             <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-                 <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                    &larr; Volver a la lista
-                </button>
-                <p className="text-center text-yellow-400 py-8">No se encontró información de la temporada actual para este piloto ({name} {surname}).</p>
-             </div>
-        );
-    }
-
-    const { team, pictures } = current_career_step;
-
-    return (
-        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                &larr; Volver a la lista
-            </button>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Columna Izquierda: Imágenes */}
-                <div className="lg:col-span-1 space-y-6">
-                     <div className="relative rounded-lg overflow-hidden shadow-2xl border border-gray-700">
-                        {pictures.profile.main ? (
-                            <img src={pictures.profile.main} alt={`${name} ${surname}`} className="w-full object-cover" />
-                        ) : (
-                            <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
-                                <UserIcon className="w-20 h-20 text-gray-600"/>
-                            </div>
-                        )}
-                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
-                             <h2 className="font-orbitron text-2xl text-white text-center">{name} {surname}</h2>
-                         </div>
-                     </div>
-                     
-                     <div className="grid grid-cols-2 gap-4">
-                        {pictures.bike.main && (
-                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
-                                <img src={pictures.bike.main} alt="Moto" className="w-full h-auto" />
-                                <p className="text-xs text-center text-gray-400 mt-1">Moto</p>
-                            </div>
-                        )}
-                        {pictures.helmet.main && (
-                            <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800 p-2">
-                                <img src={pictures.helmet.main} alt="Casco" className="w-full h-auto" />
-                                <p className="text-xs text-center text-gray-400 mt-1">Casco</p>
-                            </div>
-                        )}
-                     </div>
-                </div>
-
-                {/* Columna Derecha: Datos y Estadísticas */}
-                <div className="lg:col-span-2">
-                    <div className="flex items-start justify-between mb-6 border-b border-gray-700 pb-4">
-                        <div className="flex items-center gap-4">
-                            <img src={country.flag} alt={country.name} className="w-16 h-10 object-cover rounded-md shadow-md border border-gray-600"/>
-                            <div>
-                                <h1 className="font-orbitron text-4xl sm:text-5xl text-white uppercase tracking-wider">{name} <span className="text-red-600">{surname}</span></h1>
-                                <p className="text-gray-400 text-lg">{team.name}</p>
-                            </div>
-                        </div>
-                        <div className="text-right hidden sm:block">
-                             <span className="font-orbitron text-6xl text-white/10 font-bold select-none">#{current_career_step.number}</span>
-                        </div>
-                    </div>
-
-                    {/* Estadísticas Clave con Desglose */}
-                    {stats && (
-                        <>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-                                <StatBoxWithBreakdown label="Victorias" total={stats.grand_prix_victories?.total} categories={stats.grand_prix_victories?.categories} />
-                                <StatBoxWithBreakdown label="Podios" total={stats.podiums?.total} categories={stats.podiums?.categories} />
-                                <StatBoxWithBreakdown label="Poles" total={stats.poles?.total} categories={stats.poles?.categories} />
-                                <StatBoxWithBreakdown label="Títulos" total={stats.world_championship_wins?.total} categories={stats.world_championship_wins?.categories} isGold />
-                            </div>
-                            <div className="flex flex-wrap gap-4 mb-8">
-                                <button 
-                                    onClick={() => setShowFullStatsModal(true)}
-                                    className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors border border-gray-600 flex-1 text-center"
-                                >
-                                    Más estadísticas
-                                </button>
-                                <button 
-                                    onClick={() => setShowSeasonStatsModal(true)}
-                                    className="motogp-red-bg hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex-1 text-center"
-                                >
-                                    Histórico posición
-                                </button>
-                            </div>
-                        </>
-                    )}
-                    
-                    {data && (
-                        <div className="mb-8">
-                            <h3 className="font-orbitron text-lg text-white mb-4 uppercase">Temporada Actual</h3>
-                            <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-64">
-                                <CurrentSeasonChart results={data.motogpResults} riderSurname={surname} riderName={name} />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InfoBlock title="Datos Personales">
-                            <InfoItem label="Nacionalidad" value={country.name} />
-                            <InfoItem label="Ciudad Natal" value={birth_city} />
-                            <InfoItem label="Fecha de Nacimiento" value={new Date(birth_date).toLocaleDateString('es-ES')} />
-                            <InfoItem label="Edad" value={`${dynamicAge} años`} />
-                            {physical_attributes && (
-                                <>
-                                    <InfoItem label="Altura" value={`${physical_attributes.height} cm`} />
-                                    <InfoItem label="Peso" value={`${physical_attributes.weight} kg`} />
-                                </>
-                            )}
-                        </InfoBlock>
-
-                        <InfoBlock title="Equipo & Máquina">
-                            <InfoItem label="Dorsal" value={`#${current_career_step.number}`} />
-                            <InfoItem label="Equipo" value={team.name} />
-                            <InfoItem label="Constructor" value={team.constructor.name} />
-                            <InfoItem label="Categoría" value={current_career_step.category.name} />
-                             {team.picture && (
-                                 <div className="mt-4 bg-white/5 p-2 rounded-lg">
-                                     <img src={team.picture} alt={team.name} className="w-full h-auto" />
-                                 </div>
-                             )}
-                        </InfoBlock>
-                    </div>
-                </div>
-            </div>
-            
-            {/* Modals */}
-            {showFullStatsModal && stats && (
-                <FullStatsModal stats={stats} onClose={() => setShowFullStatsModal(false)} />
-            )}
-            {showSeasonStatsModal && rider.legacy_id && (
-                <SeasonStatsModal legacyId={rider.legacy_id} onClose={() => setShowSeasonStatsModal(false)} />
-            )}
         </div>
     );
 }
@@ -1847,63 +1145,6 @@ function ParticipantesTab({ data }: { data: MotoGpData }) {
     );
 }
 
-function MotoGpResultsTab({ data }: { data: MotoGpData }) {
-    const [selectedCircuitIndex, setSelectedCircuitIndex] = useState(0);
-
-    const circuitResults = data.motogpResults[selectedCircuitIndex];
-    
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 card-bg p-4 sm:p-6 rounded-xl shadow-lg">
-                <h2 className="font-orbitron text-2xl mb-4 text-white">Circuitos</h2>
-                 {/* Mobile / Tablet buttons */}
-                <div className="lg:hidden flex flex-wrap gap-2">
-                    {data.races.map((race, index) => (
-                        <button
-                            key={race.circuit}
-                            onClick={() => setSelectedCircuitIndex(index)}
-                            className={`flex-grow p-2 text-xs rounded-md transition-colors ${selectedCircuitIndex === index ? 'motogp-red-bg text-white' : 'bg-gray-700/50 hover:bg-gray-700'}`}
-                        >
-                            {race.circuit}
-                        </button>
-                    ))}
-                </div>
-                {/* Desktop list */}
-                <div className="hidden lg:flex flex-col space-y-2 max-h-[70vh] overflow-y-auto">
-                    {data.races.map((race, index) => (
-                         <button
-                            key={race.circuit}
-                            onClick={() => setSelectedCircuitIndex(index)}
-                            className={`w-full text-left p-3 rounded-md transition-colors ${selectedCircuitIndex === index ? 'motogp-red-bg text-white' : 'bg-gray-700/50 hover:bg-gray-700'}`}
-                         >
-                            <p className="font-bold">{race.circuit}</p>
-                            <p className="text-xs">{race.date}</p>
-                         </button>
-                    ))}
-                </div>
-            </div>
-            <div className="lg:col-span-2 card-bg p-4 sm:p-6 rounded-xl shadow-lg flex flex-col gap-8 max-h-[80vh] overflow-y-auto">
-                {circuitResults ? (
-                    <>
-                        <div>
-                            <h2 className="font-orbitron text-2xl mb-4 text-white">
-                                Resultados Sprint: <span className="motogp-red">{circuitResults.circuit}</span>
-                            </h2>
-                            <ResultsTable results={circuitResults.sprint} />
-                        </div>
-                         <div>
-                            <h2 className="font-orbitron text-2xl mb-4 text-white">
-                                Resultados Carrera: <span className="motogp-red">{circuitResults.circuit}</span>
-                            </h2>
-                            <ResultsTable results={circuitResults.race} />
-                        </div>
-                    </>
-                ) : <p className="text-gray-400">Selecciona un circuito para ver los resultados.</p>}
-            </div>
-        </div>
-    );
-}
-
 function VotarTab() {
     const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSehFnSvXp_Wp0zEPodbrzTdBTiX7cdwQkhJZsTEimwLMVPzdw/viewform?embedded=true";
     return (
@@ -2181,246 +1422,849 @@ function NewsTab() {
     );
 }
 
-function InfoPruebaTab({ data }: { data: MotoGpData | null }) {
-    const [currentView, setCurrentView] = useState<InfoView>('menu');
-    const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
-    
-    // Renderizado condicional basado en la vista actual
-    const renderContent = () => {
-        switch (currentView) {
-            case 'menu':
-                return <InfoMenu onSelectView={setCurrentView} />;
-            case 'riders_list':
-                return <RiderListView 
-                    onSelectRider={(id) => {
-                        setSelectedRiderId(id);
-                        setCurrentView('rider_detail');
-                    }} 
-                    onBack={() => setCurrentView('menu')} 
-                />;
-            case 'rider_detail':
-                if (!selectedRiderId) return null;
-                return <RiderDetailView 
-                    riderId={selectedRiderId} 
-                    onBack={() => setCurrentView('riders_list')}
-                    data={data}
-                />;
-            case 'events_list':
-                return (
-                    <div className="card-bg p-8 rounded-xl shadow-lg text-center animate-fade-in">
-                         <button onClick={() => setCurrentView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                            &larr; Volver al menú
-                        </button>
-                        <div className="flex flex-col items-center justify-center py-12">
-                            <FlagIcon className="w-16 h-16 text-gray-500 mb-4" />
-                            <h3 className="text-2xl font-orbitron text-white mb-2">Próximamente</h3>
-                            <p className="text-gray-400">La sección de eventos estará disponible muy pronto.</p>
-                        </div>
+// Helper component for detailed stat cards
+const StatDetailCard = ({ title, total, categories, borderColor }: { title: string, total: number, categories: any[], borderColor: string }) => (
+    <div className={`bg-gray-800/80 p-4 rounded-xl border-t-4 shadow-lg backdrop-blur-sm flex flex-col h-full ${borderColor}`}>
+        <div className="text-center mb-3">
+            <p className="text-4xl font-bold text-white font-orbitron">{total}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wider font-bold">{title}</p>
+        </div>
+        {categories && categories.length > 0 && (
+             <div className="mt-auto pt-3 border-t border-gray-700 space-y-1">
+                {categories.map((cat: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">{cat.category.name}</span>
+                        <span className="text-white font-bold">{cat.count}</span>
                     </div>
-                );
-            default:
-                return null;
+                ))}
+            </div>
+        )}
+    </div>
+);
+
+// Helper to render the "Current Season" chart (mocked visual structure)
+const CurrentSeasonChart = () => {
+    // Mock points for visualization to match the style
+    const points = [5, 10, 0, 13, 0, 25, 20, 0, 0, 2, 0, 0, 0, 0, 7, 0, 0, 9, 3];
+    const sprintPoints = [0, 6, 0, 2, 0, 4, 5, 0, 0, 0, 3, 2, 1, 3, 0, 0, 0, 3, 0];
+    
+    return (
+        <div className="w-full h-48 relative mt-4">
+            <div className="absolute inset-0 flex flex-col justify-between text-xs text-gray-600">
+                <span>25</span>
+                <span>20</span>
+                <span>15</span>
+                <span>10</span>
+                <span>5</span>
+                <span>0</span>
+            </div>
+            <div className="absolute inset-0 left-6 right-0 border-l border-b border-gray-700">
+                {/* Mocked chart lines using SVG */}
+                <svg className="w-full h-full" preserveAspectRatio="none">
+                     <polyline 
+                        points={points.map((p, i) => `${(i / (points.length - 1)) * 100}%,${100 - (p / 25) * 100}%`).join(' ')}
+                        fill="none"
+                        stroke="#ef4444"
+                        strokeWidth="2"
+                    />
+                     <polyline 
+                        points={sprintPoints.map((p, i) => `${(i / (sprintPoints.length - 1)) * 100}%,${100 - (p / 25) * 100}%`).join(' ')}
+                        fill="none"
+                        stroke="#22c55e"
+                        strokeWidth="2"
+                    />
+                    {points.map((p, i) => (
+                         <circle key={`r-${i}`} cx={`${(i / (points.length - 1)) * 100}%`} cy={`${100 - (p / 25) * 100}%`} r="2" fill="#ef4444" />
+                    ))}
+                     {sprintPoints.map((p, i) => (
+                         <circle key={`s-${i}`} cx={`${(i / (sprintPoints.length - 1)) * 100}%`} cy={`${100 - (p / 25) * 100}%`} r="2" fill="#22c55e" />
+                    ))}
+                </svg>
+            </div>
+            <div className="absolute bottom-0 left-6 right-0 flex justify-between text-[9px] text-gray-500 translate-y-4">
+                {['QAT', 'POR', 'AME', 'SPA', 'FRA', 'CAT', 'ITA', 'GER', 'NED', 'GBR', 'AUT', 'ARA', 'RSM', 'EMI', 'INA', 'JPN', 'AUS', 'THA', 'MAL'].map((track, i) => (
+                     <span key={i} className="hidden sm:inline-block transform -rotate-45 origin-top-left">{track}</span>
+                ))}
+            </div>
+             <div className="absolute top-0 right-0 flex gap-4 text-[10px]">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-full"></div> <span className="text-gray-400">RACE</span></div>
+                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-green-500 rounded-full"></div> <span className="text-gray-400">SPR</span></div>
+            </div>
+        </div>
+    );
+};
+
+function RiderProfileView({ riderId, onBack }: { riderId: string; onBack: () => void }) {
+    const [rider, setRider] = useState<ApiRider | null>(null);
+    const [stats, setStats] = useState<RiderStats | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadRiderData = async () => {
+            setLoading(true);
+            try {
+                const details = await fetchRiderDetails(riderId);
+                setRider(details);
+
+                if (details.legacy_id) {
+                    try {
+                        const statsData = await fetchRiderStats(details.legacy_id);
+                        setStats(statsData);
+                    } catch (e) {
+                        console.warn("No se pudieron cargar las estadísticas extendidas", e);
+                    }
+                }
+            } catch (error) {
+                console.error("Error cargando detalles del piloto:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadRiderData();
+    }, [riderId]);
+
+    // Determine the best source of truth for current season data.
+    const riderData = useMemo(() => {
+        if (!rider) return null;
+        
+        // Prefer the entry in 'career' that is marked current or is the latest season
+        let careerStep = rider.career?.find(c => c.current);
+        
+        if (!careerStep && rider.career?.length) {
+             // If no current flag, take the latest season
+             const maxSeason = Math.max(...rider.career.map(c => c.season));
+             careerStep = rider.career.find(c => c.season === maxSeason);
         }
-    };
+
+        const base = careerStep || rider.current_career_step;
+        const fallback = rider.current_career_step;
+
+        return {
+            picture: base?.pictures?.portrait || base?.pictures?.profile?.main || fallback?.pictures?.portrait || fallback?.pictures?.profile?.main,
+            bikePicture: base?.pictures?.bike?.main || fallback?.pictures?.bike?.main,
+            teamName: base?.team?.name || fallback?.team?.name || 'Sin Equipo',
+            riderNumber: base?.number || fallback?.number,
+            constructorName: base?.team?.constructor?.name || fallback?.team?.constructor?.name || '-',
+            categoryName: base?.category?.name || fallback?.category?.name || '-',
+            teamColor: base?.team?.color || fallback?.team?.color || '#374151',
+        };
+    }, [rider]);
+
+    if (!rider && loading) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+             <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+             <p className="mt-4 text-gray-400 font-orbitron">Cargando perfil...</p>
+        </div>
+    );
+
+    if (!rider || !riderData) return (
+        <div className="text-center py-20">
+            <p className="text-gray-400 mb-4">No se encontró información del piloto.</p>
+            <button onClick={onBack} className="text-red-500 hover:underline">Volver</button>
+        </div>
+    );
+
+    const { picture, bikePicture, teamName, riderNumber, constructorName, categoryName } = riderData;
 
     return (
-        <div className="w-full">
-            {renderContent()}
+        <div className="bg-[#121212] text-white min-h-screen p-4 lg:p-8 font-sans animate-fade-in">
+            {/* Botón Volver */}
+            <button 
+                onClick={onBack} 
+                className="mb-6 bg-[#1a1a1a] hover:bg-[#252525] text-white font-bold py-2 px-4 rounded flex items-center border border-gray-700 transition-colors text-sm"
+            >
+                ← Volver a la lista
+            </button>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Columna Izquierda: Foto Grande */}
+                <div className="lg:col-span-1 relative h-[500px] lg:h-auto bg-[#1a1a1a] rounded-lg overflow-hidden border border-gray-800 flex items-end justify-center shadow-2xl">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent z-10"></div>
+                     {picture ? (
+                        <img src={picture} alt={rider.name} className="h-full w-full object-cover object-top relative z-0" />
+                    ) : (
+                        <UserIcon className="w-48 h-48 text-gray-700 mb-20" />
+                    )}
+                    <h1 className="absolute bottom-8 left-0 right-0 text-center text-3xl font-orbitron font-bold z-20 tracking-wider uppercase text-white drop-shadow-lg">
+                        {rider.name} {rider.surname}
+                    </h1>
+                </div>
+
+                {/* Columna Derecha: Detalles */}
+                <div className="lg:col-span-2 flex flex-col gap-8">
+                    
+                    {/* Header: Nombre y Equipo */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-800 pb-6">
+                        <div className="flex items-center gap-4">
+                             {rider.country.flag && <img src={rider.country.flag} alt={rider.country.iso} className="h-8 rounded shadow-sm" />}
+                             <div>
+                                <h2 className="text-4xl sm:text-5xl font-orbitron font-bold uppercase tracking-wide leading-none">
+                                    {rider.name} <span className="text-red-600">{rider.surname}</span>
+                                </h2>
+                                <p className="text-gray-400 text-lg mt-1">{teamName}</p>
+                             </div>
+                        </div>
+                        {riderNumber && (
+                            <div className="text-6xl sm:text-7xl font-black text-[#1a1a1a] font-orbitron mt-4 sm:mt-0" style={{ WebkitTextStroke: '1px #333' }}>
+                                #{riderNumber}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Estadísticas Clave */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatDetailCard title="Victorias" total={stats?.grand_prix_victories.total || 0} categories={stats?.grand_prix_victories.categories || []} borderColor="border-red-600" />
+                        <StatDetailCard title="Podios" total={stats?.podiums.total || 0} categories={stats?.podiums.categories || []} borderColor="border-gray-400" />
+                        <StatDetailCard title="Poles" total={stats?.poles.total || 0} categories={stats?.poles.categories || []} borderColor="border-blue-500" />
+                        <StatDetailCard title="Títulos" total={stats?.world_championship_wins.total || 0} categories={stats?.world_championship_wins.categories || []} borderColor="border-yellow-500" />
+                    </div>
+
+                    {/* Botones de Acción */}
+                    <div className="flex gap-4">
+                        <button className="flex-1 bg-[#1e293b] hover:bg-[#334155] text-white py-3 rounded font-bold uppercase tracking-wider text-sm border border-gray-600 transition-colors">
+                            Más estadísticas
+                        </button>
+                        <button className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded font-bold uppercase tracking-wider text-sm transition-colors shadow-lg shadow-red-900/20">
+                            Histórico posición
+                        </button>
+                    </div>
+
+                    {/* Gráfica Temporada Actual */}
+                    <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-6">
+                        <h3 className="font-orbitron text-lg uppercase tracking-widest mb-4 text-white">Temporada Actual</h3>
+                        <CurrentSeasonChart />
+                    </div>
+
+                    {/* Grid Inferior: Datos y Máquina */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Datos Personales */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-6">
+                             <h3 className="font-orbitron text-lg uppercase tracking-widest mb-6 text-red-500">Datos Personales</h3>
+                             <div className="space-y-4 text-sm">
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Nacionalidad</span>
+                                    <span className="font-bold text-white">{rider.country.name}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Ciudad Natal</span>
+                                    <span className="font-bold text-white">{rider.birth_city}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Fecha de Nacimiento</span>
+                                    <span className="font-bold text-white">{new Date(rider.birth_date).toLocaleDateString()}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Edad</span>
+                                    <span className="font-bold text-white">{rider.years_old} años</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Altura</span>
+                                    <span className="font-bold text-white">{rider.physical_attributes?.height || '-'} cm</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Peso</span>
+                                    <span className="font-bold text-white">{rider.physical_attributes?.weight || '-'} kg</span>
+                                </div>
+                             </div>
+                        </div>
+
+                        {/* Equipo & Máquina */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-6 relative overflow-hidden">
+                            <h3 className="font-orbitron text-lg uppercase tracking-widest mb-6 text-red-500">Equipo & Máquina</h3>
+                            <div className="space-y-4 text-sm relative z-10">
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Dorsal</span>
+                                    <span className="font-bold text-white">#{riderNumber}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Equipo</span>
+                                    <span className="font-bold text-white text-right">{teamName}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Constructor</span>
+                                    <span className="font-bold text-white">{constructorName}</span>
+                                </div>
+                                <div className="flex justify-between border-b border-gray-800 pb-2">
+                                    <span className="text-gray-500">Categoría</span>
+                                    <span className="font-bold text-white">{categoryName}</span>
+                                </div>
+                            </div>
+                            {/* Foto de la moto superpuesta en la parte inferior */}
+                            <div className="mt-4 flex justify-center">
+                                {bikePicture ? (
+                                    <img src={bikePicture} alt="Bike" className="max-h-48 object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-500" />
+                                ) : (
+                                    <div className="h-32 w-full flex items-center justify-center bg-gray-800/30 rounded text-gray-600 italic">
+                                        Imagen de moto no disponible
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </div>
     );
 }
 
-function App() {
-    const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
-    const [rawCsv, setRawCsv] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isChatOpen, setIsChatOpen] = useState(false);
-
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            // Se añade un parámetro a la URL para evitar problemas de caché
-            const url = `${SHEET_URL}&_=${new Date().getTime()}`;
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Error al obtener los datos (código ${response.status}).`);
-            }
-            const text = await response.text();
-            setRawCsv(text);
-            const data = parseCsvData(text);
-            setMotoGpData(data);
-        } catch (err: any) {
-            setError(err.message || 'Ocurrió un error al procesar los datos.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: string) => void, onBack: () => void }) {
+    const [riders, setRiders] = useState<ApiRider[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
 
     useEffect(() => {
-        fetchData();
-        
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // Usamos la variable de entorno BASE_URL de Vite para construir la ruta correcta.
-                // Se añade optional chaining y un fallback para entornos donde vite no inyecta las variables.
-                const baseUrl = import.meta.env?.BASE_URL ?? '/PorraGP-FULL-2025/';
-                const swUrl = `${baseUrl}service-worker.js`;
-                navigator.serviceWorker.register(swUrl)
-                    .then(registration => {
-                        console.log('ServiceWorker registrado correctamente en:', registration.scope);
-                    })
-                    .catch(err => {
-                        console.error('Error en el registro de ServiceWorker:', err);
-                    });
-            });
-        }
+        const loadRiders = async () => {
+            setLoading(true);
+            try {
+                const allRiders = await fetchAllRiders();
+                setRiders(allRiders);
+            } catch (error) {
+                console.error("Error cargando pilotos:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadRiders();
+    }, []);
 
-    }, [fetchData]);
+    const filteredRiders = useMemo(() => {
+        // 1. Filtrar por categoría de manera segura (usando optional chaining)
+        let filtered = riders.filter(r => 
+            r.current_career_step?.category?.name?.toLowerCase().includes(selectedCategory.toLowerCase()) ?? false
+        );
 
-    const handleSetTab = (tab: Tab) => {
-        setActiveTab(tab);
-        setIsMenuOpen(false);
-    }
+        // 2. Ordenar: Oficiales primero, luego por número de dorsal
+        filtered.sort((a, b) => {
+            const typeA = a.current_career_step?.type;
+            const typeB = b.current_career_step?.type;
+            const numA = a.current_career_step?.number || 999;
+            const numB = b.current_career_step?.number || 999;
 
-    const renderContent = () => {
-        // Redirige a la pestaña de Live Timing si se solicita específicamente
-        if (activeTab === 'livetiming') {
-            return <LiveTimingTab />;
-        }
-        if (isLoading) {
-            return (
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                    <p className="mt-4 text-lg text-gray-300 font-orbitron">Arrancando motores...</p>
-                </div>
-            );
-        }
-        if (error) {
-            return <p className="text-center text-red-400">{error}</p>;
-        }
-        if (!motoGpData) {
-            return <p className="text-center text-gray-400">No se han podido cargar los datos.</p>;
-        }
+            const isOfficialA = typeA === 'Official';
+            const isOfficialB = typeB === 'Official';
 
-        switch (activeTab) {
-            case 'dashboard':
-                return <DashboardTab data={motoGpData} setActiveTab={setActiveTab} />;
-            case 'standings':
-                return <StandingsTab data={motoGpData} />;
-            case 'statistics':
-                return <StatisticsTab data={motoGpData} />;
-            case 'circuits':
-                 return <CircuitsTab data={motoGpData} />;
-            case 'participantes':
-                 return <ParticipantesTab data={motoGpData} />;
-            case 'motogp_results':
-                 return <MotoGpResultsTab data={motoGpData} />;
-             case 'votar':
-                return <VotarTab />;
-            case 'noticias':
-                return <NewsTab />;
-            case 'info_prueba':
-                return <InfoPruebaTab data={motoGpData} />;
-            default:
-                return null;
-        }
-    };
+            // Si uno es oficial y el otro no, el oficial va primero
+            if (isOfficialA && !isOfficialB) return -1;
+            if (!isOfficialA && isOfficialB) return 1;
+
+            // Si ambos son del mismo tipo (ambos oficiales o ambos no oficiales), ordenar por número
+            return numA - numB;
+        });
+
+        return filtered;
+    }, [riders, selectedCategory]);
 
     return (
-        <div className={`min-h-screen w-full flex flex-col ${activeTab !== 'livetiming' ? 'p-4 sm:p-8' : ''}`}>
-            <header className={`w-full max-w-7xl mx-auto flex justify-between items-center mb-8 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                <button 
-                    onClick={() => handleSetTab('dashboard')} 
-                    className="group text-2xl sm:text-4xl font-bold font-orbitron text-white text-left focus:outline-none"
-                >
-                    <span className="transition-colors duration-300 group-hover:motogp-red">Porra</span>
-                    <span className="motogp-red transition-colors duration-300 group-hover:text-white">GP</span>
-                </button>
-                <RefreshButton onClick={fetchData} isLoading={isLoading} />
-            </header>
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+             <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver al menú
+            </button>
 
-            <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
-                <div className={`flex justify-between items-center ${activeTab === 'livetiming' ? 'px-4 sm:px-8 py-4' : 'mb-8 border-b border-gray-700'}`}>
-                    {/* Mobile Menu Button & Dropdown */}
-                    <div className={`sm:hidden relative ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                        <button onClick={() => setIsMenuOpen(o => !o)} className="p-2 text-gray-400 hover:text-white">
-                             <MenuIcon className="w-6 h-6" />
-                        </button>
-                        {isMenuOpen && (
-                            <>
-                                {/* Backdrop to close menu on click outside */}
-                                <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
-                                <div
-                                    className="absolute left-0 mt-2 w-56 origin-top-left rounded-md shadow-lg card-bg ring-1 ring-black ring-opacity-5 z-50"
+            <div className="flex justify-center gap-4 mb-8">
+                {['MotoGP', 'Moto2', 'Moto3'].map(cat => (
+                    <button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
+                        className={`px-6 py-2 rounded-full font-bold transition-all transform hover:scale-105 ${
+                            selectedCategory === cat
+                            ? 'motogp-red-bg text-white shadow-lg'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                    >
+                        {cat}
+                    </button>
+                ))}
+            </div>
+
+            {loading ? (
+                 <div className="text-center py-12">
+                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                     <p className="mt-4 text-gray-400">Cargando parrilla...</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredRiders.map(rider => {
+                        // Check if career step exists to avoid crashes
+                        const career = rider.current_career_step;
+                        if (!career) return null;
+
+                        const isSubstitute = career.type !== 'Official';
+                        const teamColor = career.team?.color || '#374151';
+                        
+                        return (
+                            <div 
+                                key={rider.id}
+                                onClick={() => onRiderSelect(rider.id)}
+                                className="relative bg-gray-800/40 border border-gray-700 rounded-xl overflow-hidden hover:border-red-500 transition-all duration-300 cursor-pointer group hover:-translate-y-1"
+                            >
+                                {isSubstitute && (
+                                    <div className="absolute top-2 right-2 z-10 bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded">
+                                        {career.type}
+                                    </div>
+                                )}
+                                
+                                <div 
+                                    className="h-44 w-full relative overflow-hidden"
+                                    style={{ background: `linear-gradient(to top right, #000000, ${teamColor})` }}
                                 >
-                                    <div className="py-1" role="menu" aria-orientation="vertical">
-                                        {TABS.map(({name, tab}) => (
-                                            <button
-                                                key={tab}
-                                                onClick={() => handleSetTab(tab)}
-                                                className={`${
-                                                    activeTab === tab ? 'motogp-red bg-gray-900/50' : 'text-gray-300'
-                                                } block w-full text-left px-4 py-4 text-lg hover:bg-gray-700/80 transition-colors`}
-                                                role="menuitem"
-                                            >
-                                                {name}
-                                            </button>
-                                        ))}
+                                     {/* Imagen del piloto */}
+                                     {career.pictures?.profile?.main ? (
+                                         <img 
+                                            src={career.pictures.profile.main} 
+                                            alt={rider.name} 
+                                            className="w-full h-full object-cover object-top transform group-hover:scale-105 transition-transform duration-300"
+                                        />
+                                     ) : (
+                                         <div className="w-full h-full flex items-center justify-center">
+                                            <UserIcon className="w-24 h-24 text-gray-600" />
+                                         </div>
+                                     )}
+                                     
+                                     {/* Dorsal superpuesto */}
+                                     {career.number && (
+                                         <span className="absolute bottom-2 left-2 text-5xl font-bold font-orbitron text-white/10 group-hover:text-white/20 transition-colors">
+                                             {career.number}
+                                         </span>
+                                     )}
+                                </div>
+
+                                <div className="p-2">
+                                    <div className="flex justify-between items-center">
+                                        <div className="min-w-0 pr-2">
+                                            <h3 className="text-base font-bold text-white leading-tight truncate">{rider.name} {rider.surname}</h3>
+                                            <p className="text-gray-400 text-xs truncate">{career.team?.name}</p>
+                                        </div>
+                                        <div className="flex flex-col items-center flex-shrink-0">
+                                            {rider.country.flag && (
+                                                <img src={rider.country.flag} alt={rider.country.iso} className="w-5 rounded shadow-sm" />
+                                            )}
+                                            <span className="text-[9px] text-gray-500">{rider.country.iso}</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Desktop Tabs */}
-                    <nav className={`hidden sm:flex -mb-px space-x-6 overflow-x-auto ${activeTab === 'livetiming' ? 'hidden' : ''}`} aria-label="Tabs">
-                         {TABS.map(({ name, tab }) => (
-                            <TabButton
-                                key={tab}
-                                name={name}
-                                tab={tab}
-                                activeTab={activeTab}
-                                setActiveTab={handleSetTab}
-                            />
-                        ))}
-                    </nav>
-                     {activeTab === 'livetiming' ? (
-                        <button
-                            onClick={() => handleSetTab('dashboard')}
-                            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap"
-                        >
-                            &larr; Volver
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => setActiveTab('livetiming')}
-                            className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
-                        >
-                            LiveTiming
-                        </button>
-                    )}
+                            </div>
+                        );
+                    })}
                 </div>
-                {renderContent()}
-            </main>
-            
-            <footer className={`w-full max-w-7xl mx-auto mt-8 text-center text-xs text-gray-500 flex-shrink-0 ${activeTab === 'livetiming' ? 'hidden' : ''}`}>
-                 <p>Versión de compilación: {import.meta.env?.BUILD_TIMESTAMP ?? 'local'}</p>
-            </footer>
-
-             <ChatBubbleButton onClick={() => setIsChatOpen(true)} />
-            {isChatOpen && motoGpData && (
-                <ChatWindow
-                    onClose={() => setIsChatOpen(false)}
-                    data={motoGpData}
-                    rawCsv={rawCsv}
-                />
             )}
         </div>
     );
 }
 
-export default App;
+// --- MOTO GP DATA COMPONENTS ---
+
+type MotoGpDataView = 'menu' | 'results' | 'riders' | 'profile' | 'circuits';
+
+function MotoGpDataMenu({ onSelectView }: { onSelectView: (view: MotoGpDataView) => void }) {
+    return (
+        <div className="animate-fade-in">
+            <h2 className="font-orbitron text-3xl text-white text-center mb-8">MotoGP Data</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <button 
+                    onClick={() => onSelectView('results')}
+                    className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600 hover:bg-gray-800/60 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
+                >
+                    <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+                        <TableIcon className="w-6 h-6 sm:w-8 sm:h-8" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-400">Consulta los</p>
+                        <h2 className="text-lg sm:text-2xl font-bold text-white font-orbitron">Resultados</h2>
+                        <p className="text-xs sm:text-sm text-green-500">Oficiales de cada sesión</p>
+                    </div>
+                </button>
+
+                <button 
+                    onClick={() => onSelectView('riders')}
+                    className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600 hover:bg-gray-800/60 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
+                >
+                    <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+                        <UserIcon className="w-6 h-6 sm:w-8 sm:h-8" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-400">Información de</p>
+                        <h2 className="text-lg sm:text-2xl font-bold text-white font-orbitron">Pilotos</h2>
+                        <p className="text-xs sm:text-sm text-green-500">Parrilla y Fichas</p>
+                    </div>
+                </button>
+
+                <button 
+                    onClick={() => onSelectView('circuits')}
+                    className="card-bg p-4 sm:p-6 rounded-xl shadow-lg flex items-center space-x-4 border-t-4 border-red-600 hover:bg-gray-800/60 transition-all duration-300 transform hover:-translate-y-1 text-left w-full"
+                >
+                    <div className="p-3 bg-gray-700/50 rounded-lg text-red-500">
+                        <FlagIcon className="w-6 h-6 sm:w-8 sm:h-8" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-400">Detalles de</p>
+                        <h2 className="text-lg sm:text-2xl font-bold text-white font-orbitron">Circuitos</h2>
+                        <p className="text-xs sm:text-sm text-green-500">Calendario y Eventos</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function MotoGpResultsView({ onBack }: { onBack: () => void }) {
+    const [seasons, setSeasons] = useState<ApiSeason[]>([]);
+    const [categories, setCategories] = useState<ApiCategoryResult[]>([]);
+    const [events, setEvents] = useState<ApiEventResult[]>([]);
+    const [sessions, setSessions] = useState<ApiSessionResult[]>([]);
+    const [classification, setClassification] = useState<ApiClassificationItem[]>([]);
+
+    const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+    const [selectedEventId, setSelectedEventId] = useState<string>('');
+    const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+
+    const [loadingSeasons, setLoadingSeasons] = useState(true);
+    const [loadingCategories, setLoadingCategories] = useState(false);
+    const [loadingEvents, setLoadingEvents] = useState(false);
+    const [loadingSessions, setLoadingSessions] = useState(false);
+    const [loadingClassification, setLoadingClassification] = useState(false);
+
+    // 1. Cargar Temporadas
+    useEffect(() => {
+        const loadSeasons = async () => {
+            setLoadingSeasons(true);
+            try {
+                const data = await fetchSeasons();
+                setSeasons(data);
+                const current = data.find(s => s.current);
+                if (current) {
+                    setSelectedSeasonId(current.id);
+                } else if (data.length > 0) {
+                    setSelectedSeasonId(data[0].id);
+                }
+            } catch (error) {
+                console.error("Error cargando temporadas:", error);
+            } finally {
+                setLoadingSeasons(false);
+            }
+        };
+        loadSeasons();
+    }, []);
+
+    // 2. Cargar Categorías y Eventos cuando cambia la Temporada
+    useEffect(() => {
+        if (!selectedSeasonId) return;
+
+        const loadCascadingData = async () => {
+            setLoadingCategories(true);
+            setLoadingEvents(true);
+            try {
+                // Cargar categorías
+                const cats = await fetchResultCategories(selectedSeasonId);
+                setCategories(cats);
+                if (cats.length > 0) {
+                    setSelectedCategoryId(cats[0].id);
+                }
+
+                // Cargar eventos
+                const evts = await fetchResultEvents(selectedSeasonId);
+                
+                // Filtrar TESTs
+                const filteredEvents = evts.filter(e => {
+                    const name = (e.name || '').toUpperCase();
+                    const sponsored = (e.sponsored_name || '').toUpperCase();
+                    return !name.includes('TEST') && !sponsored.includes('TEST');
+                });
+
+                setEvents(filteredEvents);
+                
+                // Lógica por defecto para eventos: Último con status 'FINISHED'
+                const finishedEvents = filteredEvents.filter(e => e.status === 'FINISHED');
+                if (finishedEvents.length > 0) {
+                    setSelectedEventId(finishedEvents[finishedEvents.length - 1].id);
+                } else if (filteredEvents.length > 0) {
+                    // Si no hay ninguno finished, seleccionamos el primero (o el último, según preferencia, aquí el primero del listado total)
+                    setSelectedEventId(filteredEvents[0].id);
+                }
+
+            } catch (error) {
+                console.error("Error cargando datos en cascada:", error);
+            } finally {
+                setLoadingCategories(false);
+                setLoadingEvents(false);
+            }
+        };
+
+        loadCascadingData();
+    }, [selectedSeasonId]);
+
+    // 3. Cargar Sesiones cuando cambia Evento o Categoría
+    useEffect(() => {
+        if (!selectedEventId || !selectedCategoryId) return;
+
+        const loadSessions = async () => {
+            setLoadingSessions(true);
+            setSessions([]);
+            setClassification([]);
+            setSelectedSessionId('');
+            try {
+                const sessionData = await fetchResultSessions(selectedEventId, selectedCategoryId);
+                setSessions(sessionData);
+
+                // Auto-seleccionar carrera ('RAC') por defecto
+                const raceSession = sessionData.find(s => s.type === 'RAC');
+                if (raceSession) {
+                    setSelectedSessionId(raceSession.id);
+                } else if (sessionData.length > 0) {
+                    // Si no hay carrera (ej: es viernes), seleccionamos la última sesión disponible (la más reciente)
+                    setSelectedSessionId(sessionData[sessionData.length - 1].id);
+                }
+            } catch (error) {
+                console.error("Error cargando sesiones:", error);
+            } finally {
+                setLoadingSessions(false);
+            }
+        };
+        loadSessions();
+    }, [selectedEventId, selectedCategoryId]);
+
+    // 4. Cargar Clasificación cuando cambia la Sesión
+    useEffect(() => {
+        if (!selectedSessionId) return;
+
+        const loadClassification = async () => {
+            setLoadingClassification(true);
+            setClassification([]);
+            try {
+                const data = await fetchSessionClassification(selectedSessionId);
+                setClassification(data.classification);
+            } catch (error) {
+                console.error("Error cargando clasificación:", error);
+            } finally {
+                setLoadingClassification(false);
+            }
+        };
+        loadClassification();
+    }, [selectedSessionId]);
+
+
+    const getSessionLabel = (session: ApiSessionResult) => {
+        return session.type + (session.number ? session.number : '');
+    };
+
+    // Función auxiliar para determinar el tipo de sesión y columnas
+    const isRaceSession = useMemo(() => {
+        const session = sessions.find(s => s.id === selectedSessionId);
+        return session?.type === 'RAC' || session?.type === 'SPR';
+    }, [sessions, selectedSessionId]);
+
+    // Obtener la sesión seleccionada para mostrar datos de cabecera
+    const selectedSession = useMemo(() => sessions.find(s => s.id === selectedSessionId), [sessions, selectedSessionId]);
+
+    // Función para formatear la fecha DD/MM/AA - HH:MM:SS
+    const formatDate = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const year = date.getFullYear().toString().slice(-2);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
+        } catch (e) {
+            return dateString;
+        }
+    };
+
+    return (
+        <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
+            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver al menú
+            </button>
+
+            <h2 className="font-orbitron text-2xl text-white mb-6">Resultados Oficiales</h2>
+
+            {/* FILTROS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                {/* Selector de Año */}
+                <div>
+                    <label className="block text-gray-400 text-sm font-bold mb-2">Año</label>
+                    <select
+                        value={selectedSeasonId}
+                        onChange={(e) => setSelectedSeasonId(e.target.value)}
+                        disabled={loadingSeasons}
+                        className="w-full bg-gray-800 border border-gray-600 text-white py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:border-red-500"
+                    >
+                        {loadingSeasons ? (
+                            <option>Cargando...</option>
+                        ) : (
+                            seasons.map(s => (
+                                <option key={s.id} value={s.id}>{s.year}</option>
+                            ))
+                        )}
+                    </select>
+                </div>
+
+                {/* Selector de Categoría */}
+                <div>
+                    <label className="block text-gray-400 text-sm font-bold mb-2">Categoría</label>
+                    <select
+                        value={selectedCategoryId}
+                        onChange={(e) => setSelectedCategoryId(e.target.value)}
+                        disabled={loadingCategories || !selectedSeasonId}
+                        className="w-full bg-gray-800 border border-gray-600 text-white py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:border-red-500"
+                    >
+                         {loadingCategories ? (
+                            <option>Cargando...</option>
+                        ) : (
+                            categories.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))
+                        )}
+                    </select>
+                </div>
+
+                {/* Selector de Evento */}
+                <div>
+                    <label className="block text-gray-400 text-sm font-bold mb-2">Circuito / Evento</label>
+                    <select
+                         value={selectedEventId}
+                         onChange={(e) => setSelectedEventId(e.target.value)}
+                         disabled={loadingEvents || !selectedSeasonId}
+                         className="w-full bg-gray-800 border border-gray-600 text-white py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:border-red-500"
+                    >
+                        {loadingEvents ? (
+                            <option>Cargando...</option>
+                        ) : (
+                            events.map(e => (
+                                <option key={e.id} value={e.id}>{e.sponsored_name || e.name}</option>
+                            ))
+                        )}
+                    </select>
+                </div>
+            </div>
+
+            {/* SELECTOR DE SESIONES */}
+            {loadingSessions ? (
+                <div className="text-center py-4 text-gray-400">Cargando sesiones...</div>
+            ) : sessions.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mb-8 justify-center md:justify-start">
+                    {sessions.map(s => {
+                        const label = getSessionLabel(s);
+                        const isSelected = selectedSessionId === s.id;
+                        return (
+                            <button
+                                key={s.id}
+                                onClick={() => setSelectedSessionId(s.id)}
+                                className={`px-4 py-2 rounded text-sm font-bold transition-all duration-200 ${
+                                    isSelected 
+                                    ? 'motogp-red-bg text-white shadow-lg scale-105' 
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
+            ) : (
+                <div className="text-center py-4 text-gray-400 bg-gray-800/50 rounded-lg border border-gray-700 mb-8">
+                    No hay sesiones disponibles para este evento.
+                </div>
+            )}
+
+             {/* CABECERA DE SESIÓN (FECHA Y CONDICIONES) */}
+             {selectedSession && (
+                <div className="mb-4 bg-gray-800/50 p-3 rounded-lg border border-gray-700 text-center">
+                    <p className="text-white font-orbitron text-lg font-bold mb-1">
+                        {formatDate(selectedSession.date)}
+                    </p>
+                    {selectedSession.condition && (
+                        <p className="text-xs text-gray-400 uppercase tracking-wide">
+                            Pista: <span className="text-gray-300 font-bold">{selectedSession.condition.track}</span> | 
+                            Tª Aire: <span className="text-gray-300 font-bold">{selectedSession.condition.air}</span> | 
+                            Humedad: <span className="text-gray-300 font-bold">{selectedSession.condition.humidity}</span> | 
+                            Tº Asfalto: <span className="text-gray-300 font-bold">{selectedSession.condition.ground}</span> | 
+                            Clima: <span className="text-gray-300 font-bold">{selectedSession.condition.weather}</span>
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* TABLA DE CLASIFICACIÓN */}
+            {selectedSessionId && (
+                loadingClassification ? (
+                    <div className="text-center py-12">
+                         <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                         <p className="mt-4 text-gray-400">Cargando resultados...</p>
+                    </div>
+                ) : classification.length > 0 ? (
+                    <div className="overflow-x-auto rounded-lg border border-gray-700">
+                        <table className="w-full text-sm text-left text-gray-300">
+                            <thead className="text-xs text-red-400 uppercase bg-gray-900/90">
+                                <tr>
+                                    <th className="px-4 py-3 text-center">Pos</th>
+                                    <th className="px-4 py-3">Piloto</th>
+                                    <th className="px-4 py-3 hidden sm:table-cell">Equipo</th>
+                                    <th className="px-4 py-3 hidden md:table-cell">Moto</th>
+                                    {isRaceSession ? (
+                                        <>
+                                            <th className="px-4 py-3 text-right">Tiempo/Dif</th>
+                                            <th className="px-4 py-3 text-center">Pts</th>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <th className="px-4 py-3 text-right">Tiempo</th>
+                                            <th className="px-4 py-3 text-right hidden sm:table-cell">Dif 1º</th>
+                                            <th className="px-4 py-3 text-right hidden md:table-cell">Dif Ant</th>
+                                        </>
+                                    )}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-gray-800/30">
+                                {classification.map((item, index) => {
+                                    const posClass = item.position === 1 ? 'bg-yellow-500 text-black' : 
+                                                     item.position === 2 ? 'bg-gray-300 text-black' : 
+                                                     item.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-gray-300';
+
+                                    // Lógica para construir la información de Equipo / Constructor de forma segura
+                                    const teamName = item.team?.name;
+                                    const constructorName = item.constructor?.name;
+                                    
+                                    let teamInfo = '';
+                                    if (teamName && constructorName) {
+                                        teamInfo = `${teamName} / ${constructorName}`;
+                                    } else if (teamName) {
+                                        teamInfo = teamName;
+                                    } else if (constructorName) {
+                                        teamInfo = constructorName;
+                                    } else {
+                                        teamInfo = '';
+                                    }
+                                    
+                                    return (
+                                        <tr key={item.id} className="border-b border-gray-700 hover:bg-gray-700/40 transition-colors">
+                                            <td className="px-4 py-3 text-center">
+                                                {item.position ? (
+                                                    <span className={`w-6 h-6 inline-flex items-center justify-center font-bold rounded text-xs ${posClass}`}>
+                                                        {item.position}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-500">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex flex-col items-center min-w-[24px]">
+                                                         <span className="text-xs text-gray-400 font-mono">{item.rider.number ? `#${item.rider.number}` : ''}</span>
+                                                         {/* Bandera simplificada con texto si no hay imagen disponible */}
+                                                         <span className="text-[10px] text-gray-500">{item.rider.country.iso}</span>
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-white text-base">{item.rider.full_name}</span>
+                                                        {/* Nuevo subtexto Team/Constructor */}
+                                                        <span className="text-xs text-gray-400">{teamInfo}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 hidden sm:table-cell text-gray-400">{item.team?.name || '-'}</td>
+                                            <td className="px-4 py-3 hidden md:table-cell text-gray-400">{item.constructor?.name || '-'}</td>
+                                            
+                               

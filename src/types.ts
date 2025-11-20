@@ -1,4 +1,3 @@
-
 // Fix: Manually define types for import.meta.env as a workaround for "vite/client" resolution issues.
 // This resolves errors related to 'import.meta.env' and the inability to find 'vite/client' type definitions.
 declare global {
@@ -117,17 +116,153 @@ export interface LiveTimingData {
   rider: Record<string, LiveTimingRider>;
 }
 
-// --- MotoGP API Types for InfoPruebaTab ---
+// --- MotoGP API Types ---
 export interface ApiSeason {
   id: string;
   year: number;
   current: boolean;
 }
 
+// Categorías para la API de Resultados (Results API)
+export interface ApiCategoryResult {
+    id: string;
+    name: string;
+    legacy_id: number;
+}
+
+// Eventos para la API de Resultados (Results API)
+export interface ApiEventResult {
+    id: string;
+    name: string;
+    sponsored_name: string;
+    short_name: string;
+    status: string; // 'FINISHED', 'NOT-STARTED', etc.
+    date_start: string;
+    date_end: string;
+    season: {
+        id: string;
+        year: number;
+        current: boolean;
+    };
+    circuit: {
+        id: string;
+        name: string;
+        place: string;
+        nation: string;
+    };
+}
+
+// Sesiones para la API de Resultados (Results API)
+export interface ApiSessionResult {
+    id: string;
+    type: string; // 'FP', 'Q', 'RAC', 'SPR', 'WUP', 'PR'
+    number: number | null;
+    status: string; // 'FINISHED'
+    date: string;
+    condition?: {
+        track: string;
+        air: string;
+        humidity: string;
+        ground: string;
+        weather: string;
+    };
+}
+
+// Clasificación Detallada para la API de Resultados (Results API)
+export interface ApiClassificationItem {
+    id: string;
+    position: number | null;
+    points?: number;
+    status: string; // 'INSTND', 'OUTSTND'
+    rider: {
+        id: string;
+        full_name: string;
+        number: number | null;
+        country: {
+            iso: string;
+            name: string;
+        };
+    };
+    team: {
+        id: string;
+        name: string;
+    } | null;
+    constructor: {
+        id: string;
+        name: string;
+    } | null;
+    // Campos específicos de Entrenamientos/Qualy
+    best_lap?: {
+        time: string;
+        number: number | null;
+    };
+    top_speed?: number;
+    // Campos específicos de Carrera
+    time?: string;
+    total_laps?: number;
+    average_speed?: number;
+    gap?: {
+        first?: string;
+        prev?: string;
+        lap?: string;
+    };
+}
+
+export interface ApiClassificationResponse {
+    classification: ApiClassificationItem[];
+    file?: string;
+}
+
+// Tipos Legacy para compatibilidad con otras partes
 export interface ApiCategory {
     id: string;
     name: string;
     legacy_id: number;
+}
+
+export interface ApiAsset {
+    id: string;
+    name: string;
+    type: string;
+    path: string;
+}
+
+export interface ApiCircuitDescription {
+    language: string;
+    description: string;
+}
+
+export interface ApiTrack {
+    lenght: string;
+    width: string;
+    longest_straight: string;
+    left_corners: string;
+    right_corners: string;
+    assets: {
+        info?: { path: string };
+        simple?: { path: string };
+    };
+}
+
+export interface ApiCircuit {
+    id: string;
+    name: string;
+    place_id?: string;
+    city?: string;
+    country?: string;
+    track?: ApiTrack;
+    circuit_descriptions: ApiCircuitDescription[];
+}
+
+export interface ApiEvent {
+    id: string;
+    name: string;
+    date_start: string;
+    date_end: string;
+    status: string;
+    assets: ApiAsset[];
+    circuit: ApiCircuit;
+    country: string;
 }
 
 export interface ApiRider {
@@ -151,10 +286,13 @@ export interface ApiRider {
     current_career_step: {
         season: number;
         number: number;
+        type: string; // 'Official', 'Substitute', 'Wildcard'
         team: {
             id: string;
             name: string;
             picture: string;
+            color?: string;
+            text_color?: string;
             constructor: {
                 name: string;
             }
@@ -174,8 +312,30 @@ export interface ApiRider {
         season: number;
         number: number;
         sponsored_team: string;
-        category: { name: string };
+        team: {
+            id: string;
+            name: string;
+            picture: string;
+            constructor: {
+                name: string;
+            };
+            color?: string;
+            text_color?: string;
+        };
+        category: {
+            id: string;
+            name: string;
+            legacy_id: number;
+        };
         current: boolean;
+        type: string;
+        pictures: {
+            profile: { main: string | null, secondary: string | null };
+            bike: { main: string | null, secondary: string | null };
+            helmet: { main: string | null, secondary: string | null };
+            number: string | null;
+            portrait: string | null;
+        };
     }[];
     published: boolean;
 }

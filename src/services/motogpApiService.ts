@@ -1,7 +1,6 @@
+import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider, RiderStats, RiderSeasonStat, ApiEvent, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationResponse } from '../types';
 
-import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider, RiderStats, RiderSeasonStat } from '../types';
-
-const PROXY_URL = 'https://corsproxy.io/?';
+const PROXY_URL = 'https://autumn-shape-d3e8.inigoggrijalba.workers.dev/?url=';
 const API_BASE_URL = 'https://api.motogp.pulselive.com/motogp/v1';
 
 // Puntos basados en la normativa oficial de MotoGP
@@ -99,13 +98,37 @@ export const fetchLiveTiming = async (): Promise<LiveTimingData> => {
 };
 
 
-// --- Funciones para InfoPruebaTab ---
+// --- Funciones para MotoGp Data Tab (Results API) ---
+
 export const fetchSeasons = async (): Promise<ApiSeason[]> => {
-    // Usamos el endpoint de 'results' porque devuelve un array más simple y directo de temporadas.
     const seasons = await apiFetch<ApiSeason[]>('/results/seasons');
-    // Ordenamos por año descendente.
     return seasons.sort((a, b) => b.year - a.year);
 };
+
+export const fetchResultCategories = async (seasonId: string): Promise<ApiCategoryResult[]> => {
+    return apiFetch<ApiCategoryResult[]>(`/results/categories?seasonUuid=${seasonId}`);
+};
+
+export const fetchResultEvents = async (seasonId: string): Promise<ApiEventResult[]> => {
+    return apiFetch<ApiEventResult[]>(`/results/events?seasonUuid=${seasonId}`);
+};
+
+export const fetchResultSessions = async (eventId: string, categoryId: string): Promise<ApiSessionResult[]> => {
+    return apiFetch<ApiSessionResult[]>(`/results/sessions?eventUuid=${eventId}&categoryUuid=${categoryId}`);
+};
+
+export const fetchSessionClassification = async (sessionId: string): Promise<ApiClassificationResponse> => {
+    return apiFetch<ApiClassificationResponse>(`/results/session/${sessionId}/classification?test=false`);
+};
+
+
+// --- Funciones Broadcast/Riders (NUEVO) ---
+
+export const fetchAllRiders = async (): Promise<ApiRider[]> => {
+    return apiFetch<ApiRider[]>('/riders');
+};
+
+// --- Funciones Legacy (se mantienen para detalles específicos) ---
 
 export const fetchRidersBySeason = async (seasonYear: number, categoryName: string = 'MotoGP'): Promise<ApiRider[]> => {
     // 1. Obtener el ID de la categoría para el año seleccionado.
@@ -146,4 +169,8 @@ export const fetchRiderStats = async (legacyId: number): Promise<RiderStats> => 
 
 export const fetchRiderSeasonStats = async (legacyId: number): Promise<RiderSeasonStat[]> => {
     return apiFetch<RiderSeasonStat[]>(`/riders/${legacyId}/statistics`);
+};
+
+export const fetchEventsBySeason = async (year: number): Promise<ApiEvent[]> => {
+    return apiFetch<ApiEvent[]>(`/events?seasonYear=${year}`);
 };
