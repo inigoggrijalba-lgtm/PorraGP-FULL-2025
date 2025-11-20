@@ -312,7 +312,7 @@ export interface ApiRider {
         season: number;
         number: number;
         sponsored_team: string;
-        team: {
+        team?: {
             id: string;
             name: string;
             picture: string;
@@ -328,8 +328,8 @@ export interface ApiRider {
             legacy_id: number;
         };
         current: boolean;
-        type: string;
-        pictures: {
+        type?: string;
+        pictures?: {
             profile: { main: string | null, secondary: string | null };
             bike: { main: string | null, secondary: string | null };
             helmet: { main: string | null, secondary: string | null };

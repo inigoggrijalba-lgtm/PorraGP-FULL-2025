@@ -1,7 +1,3 @@
-
-
-
-
 // Fix: Manually define types for import.meta.env as a workaround for "vite/client" resolution issues.
 // This resolves errors related to 'import.meta.env' and the inability to find 'vite/client' type definitions.
 declare global {
@@ -316,8 +312,30 @@ export interface ApiRider {
         season: number;
         number: number;
         sponsored_team: string;
-        category: { name: string };
+        team?: {
+            id: string;
+            name: string;
+            picture: string;
+            constructor: {
+                name: string;
+            };
+            color?: string;
+            text_color?: string;
+        };
+        category: {
+            id: string;
+            name: string;
+            legacy_id: number;
+        };
         current: boolean;
+        type?: string;
+        pictures?: {
+            profile: { main: string | null, secondary: string | null };
+            bike: { main: string | null, secondary: string | null };
+            helmet: { main: string | null, secondary: string | null };
+            number: string | null;
+            portrait: string | null;
+        };
     }[];
     published: boolean;
 }
