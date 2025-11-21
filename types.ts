@@ -1,3 +1,5 @@
+
+
 // Fix: Manually define types for import.meta.env as a workaround for "vite/client" resolution issues.
 // This resolves errors related to 'import.meta.env' and the inability to find 'vite/client' type definitions.
 declare global {
@@ -232,6 +234,30 @@ export interface ApiCircuitDescription {
     description: string;
 }
 
+// Detailed track info for Broadcast API
+export interface ApiTrackUnits {
+    meters: number;
+    kiloMeters: number;
+    miles: number;
+    feet: number;
+}
+
+export interface ApiTrackDetailed {
+    id: string;
+    lenght: string; // Note: API typo 'lenght' preserved
+    lenght_units: ApiTrackUnits;
+    width: string;
+    width_units: ApiTrackUnits;
+    longest_straight: string;
+    longest_straight_units: ApiTrackUnits;
+    left_corners: string;
+    right_corners: string;
+    assets: {
+        info?: { path: string };
+        simple?: { path: string };
+    };
+}
+
 export interface ApiTrack {
     lenght: string;
     width: string;
@@ -250,7 +276,8 @@ export interface ApiCircuit {
     place_id?: string;
     city?: string;
     country?: string;
-    track?: ApiTrack;
+    constructed?: number;
+    track?: ApiTrackDetailed; // Updated to detailed version
     circuit_descriptions: ApiCircuitDescription[];
 }
 
@@ -263,6 +290,45 @@ export interface ApiEvent {
     assets: ApiAsset[];
     circuit: ApiCircuit;
     country: string;
+}
+
+// --- Broadcast API Types (para el Calendario) ---
+export interface ApiBroadcastAsset {
+    id: string;
+    name: string;
+    type: string; // 'BACKGROUND', 'FLAG', 'TOP', etc.
+    path: string;
+}
+
+export interface ApiBroadcastSession {
+    id: string;
+    shortname: string; // 'FP1', 'RAC', etc.
+    name: string;
+    date_start: string;
+    date_end: string;
+    kind: string;
+    category: {
+        name: string;
+    };
+}
+
+export interface ApiBroadcastEvent {
+    id: string;
+    name: string;
+    additional_name: string; // 'THAILAND', 'PORTUGAL'
+    shortname: string; // 'THA', 'POR'
+    date_start: string;
+    date_end: string;
+    kind: string; // 'GP', 'TEST'
+    status: string; // 'FINISHED', 'NOT-STARTED'
+    sequence: number;
+    circuit: ApiCircuit; // Reuse the detailed circuit definition
+    country: string; // ISO code
+    assets: ApiBroadcastAsset[];
+    broadcasts: ApiBroadcastSession[];
+    season: {
+        year: number;
+    }
 }
 
 export interface ApiRider {

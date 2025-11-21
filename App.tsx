@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem } from './types';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -2069,7 +2069,7 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
 
 // --- MOTO GP DATA COMPONENTS ---
 
-type MotoGpDataView = 'menu' | 'results' | 'riders' | 'profile' | 'circuits';
+type MotoGpDataView = 'menu' | 'results' | 'riders' | 'profile' | 'circuits' | 'circuit_detail';
 
 function MotoGpDataMenu({ onSelectView }: { onSelectView: (view: MotoGpDataView) => void }) {
     return (
@@ -2520,13 +2520,608 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
     );
 }
 
+function MotoGpEventDetailView({ event, onBack }: { event: ApiBroadcastEvent, onBack: () => void }) {
+    const [activeTab, setActiveTab] = useState<'schedule' | 'info'>('schedule');
+    const [isCapturing, setIsCapturing] = useState(false);
+    const [screenshot, setScreenshot] = useState<string | null>(null);
+    const scheduleRef = useRef<HTMLDivElement>(null);
+
+    const formatDate = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
+        } catch (e) {
+            return 'TBC';
+        }
+    };
+
+    const formatDateRange = (start: string, end: string) => {
+        try {
+            const d1 = new Date(start);
+            const d2 = new Date(end);
+            const m1 = d1.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+            const m2 = d2.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+            const day1 = d1.getDate().toString().padStart(2, '0');
+            const day2 = d2.getDate().toString().padStart(2, '0');
+            
+            if (m1 === m2) return `${day1} - ${day2} ${m1}`;
+            return `${day1} ${m1} - ${day2} ${m2}`;
+        } catch (e) {
+            return 'TBC';
+        }
+    };
+
+    const handleCaptureScreenshot = async () => {
+        if (!scheduleRef.current) return;
+        setIsCapturing(true);
+        try {
+            const canvas = await html2canvas(scheduleRef.current, {
+                backgroundColor: '#1d1d1d',
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                ignoreElements: (element: any) => {
+                    return element.getAttribute('data-html2canvas-ignore') === 'true';
+                }
+            });
+            setScreenshot(canvas.toDataURL('image/png'));
+        } catch (error) {
+            console.error("Error capturing screenshot:", error);
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
+    const getEventImage = (event: ApiBroadcastEvent) => {
+        const bg = event.assets.find(a => a.type === 'BACKGROUND');
+        if (bg) return bg.path;
+        const top = event.assets.find(a => a.type === 'TOP');
+        if (top) return top.path;
+        return null;
+    };
+
+    const getEventFlag = (event: ApiBroadcastEvent) => {
+        const flag = event.assets.find(a => a.type === 'FLAG');
+        return flag ? flag.path : null;
+    };
+    
+    const getTrackImage = (event: ApiBroadcastEvent) => {
+        return event.circuit?.track?.assets?.simple?.path || null;
+    };
+
+    const translateSessionName = (shortName: string, name: string): string => {
+        if (shortName.includes('FP') || name.toLowerCase().includes('free practice')) return shortName.replace('FP', 'Entrenamientos Libres ');
+        if (shortName === 'PR' || name.toLowerCase().includes('practice')) return 'Práctica';
+        if (shortName.includes('Q')) return shortName.replace('Q', 'Clasificación ');
+        if (shortName === 'SPR' || name.toLowerCase().includes('sprint')) return 'Sprint';
+        if (shortName === 'WUP' || name.toLowerCase().includes('warm up')) return 'Warm Up';
+        if (shortName === 'RAC' || name.toLowerCase().includes('race') || name.toLowerCase().includes('grand prix')) return 'Carrera';
+        return name;
+    };
+
+    const formatSessionTime = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return '--:--';
+        }
+    };
+
+    const formatSessionDay = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
+        } catch (e) {
+            return '---';
+        }
+    };
+
+    const circuitDescription = event.circuit.circuit_descriptions?.find(d => d.language === 'es')?.description || null;
+    const track = event.circuit.track;
+
+    return (
+        <div className="animate-fade-in pb-10">
+             <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver al calendario
+            </button>
+
+            {/* CABECERA */}
+            <div className="relative w-full h-64 rounded-xl overflow-hidden shadow-2xl border border-gray-700 mb-6">
+                <div className="absolute inset-0 bg-black/60 z-10"></div>
+                {getEventImage(event) && (
+                    <img src={getEventImage(event)!} alt="Background" className="w-full h-full object-cover" />
+                )}
+                <div className="absolute bottom-0 left-0 p-6 z-20 w-full bg-gradient-to-t from-black via-black/50 to-transparent">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                         <div>
+                            <div className="flex items-center gap-2 mb-2">
+                                {getEventFlag(event) && (
+                                    <img src={getEventFlag(event)!} className="h-6 w-auto shadow-sm" alt="Flag" />
+                                )}
+                                <span className="text-gray-300 font-orbitron text-sm tracking-widest">
+                                    {formatDate(event.date_start)} - {formatDate(event.date_end)}
+                                </span>
+                            </div>
+                            <h1 className="text-3xl md:text-5xl font-black text-white uppercase leading-none font-orbitron">
+                                {event.additional_name || event.name}
+                            </h1>
+                            <p className="text-gray-400 text-sm uppercase tracking-wide mt-1">
+                                {event.circuit.name}
+                            </p>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* TABS DE NAVEGACIÓN */}
+            <div className="flex gap-2 mb-6 border-b border-gray-700">
+                <button 
+                    onClick={() => setActiveTab('schedule')}
+                    className={`px-6 py-3 font-orbitron font-bold text-lg transition-colors border-b-2 ${activeTab === 'schedule' ? 'text-red-500 border-red-500' : 'text-gray-400 border-transparent hover:text-gray-200'}`}
+                >
+                    HORARIO
+                </button>
+                <button 
+                    onClick={() => setActiveTab('info')}
+                    className={`px-6 py-3 font-orbitron font-bold text-lg transition-colors border-b-2 ${activeTab === 'info' ? 'text-red-500 border-red-500' : 'text-gray-400 border-transparent hover:text-gray-200'}`}
+                >
+                    INFO CIRCUITO
+                </button>
+            </div>
+
+            {/* CONTENIDO TABS */}
+            {activeTab === 'schedule' && (
+                <>
+                    <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg" ref={scheduleRef}>
+                        {/* Header discreto para la captura de pantalla */}
+                        <div className="flex justify-between items-end border-b border-gray-700 pb-4 mb-4">
+                            <div>
+                                <h2 className="text-xl font-orbitron text-white font-bold uppercase">{event.additional_name || event.name}</h2>
+                                <p className="text-gray-400 text-xs uppercase tracking-wider">{event.circuit.name}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-red-500 font-bold font-orbitron text-sm">{formatDateRange(event.date_start, event.date_end)}</p>
+                            </div>
+                        </div>
+
+                        {event.broadcasts && event.broadcasts.length > 0 ? (
+                            <div className="space-y-0">
+                                {event.broadcasts
+                                    .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime())
+                                    .map((session, idx) => (
+                                    <div key={idx} className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-800 py-4 last:border-0 hover:bg-white/5 px-2 rounded transition-colors">
+                                        <div className="flex items-center gap-4 mb-2 sm:mb-0">
+                                            <div className="flex flex-col items-center bg-gray-800 rounded px-3 py-1 min-w-[60px]">
+                                                <span className="text-xs text-gray-400 font-bold">{formatSessionDay(session.date_start)}</span>
+                                                <span className="text-lg text-white font-mono font-bold">{formatSessionTime(session.date_start)}</span>
+                                            </div>
+                                            <div>
+                                                 <p className="text-gray-400 text-xs uppercase font-bold">{session.category.name}</p>
+                                                 <p className="text-white font-bold text-lg">{translateSessionName(session.shortname, session.name)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700 border-dashed">
+                                 <p className="text-gray-400 text-lg">Horario disponible dentro de poco</p>
+                            </div>
+                        )}
+
+                        {/* Botón Compartir - Ignorado por html2canvas */}
+                        <div className="mt-6 flex justify-end" data-html2canvas-ignore="true">
+                            <button
+                                onClick={handleCaptureScreenshot}
+                                disabled={isCapturing}
+                                className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm"
+                                aria-label={isCapturing ? "Capturando..." : "Capturar y compartir horarios"}
+                            >
+                                {isCapturing ? (
+                                    <RefreshIcon className="w-4 h-4 animate-spin mr-2" />
+                                ) : (
+                                    <CameraIcon className="w-4 h-4 mr-2" />
+                                )}
+                                <span>{isCapturing ? 'Capturando...' : 'Compartir Horarios'}</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {screenshot && (
+                        <ScreenshotModal 
+                            imageDataUrl={screenshot}
+                            onClose={() => setScreenshot(null)}
+                        />
+                    )}
+                </>
+            )}
+
+            {activeTab === 'info' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* COLUMNA IZQUIERDA: Descripción y Mapa */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="card-bg p-6 rounded-xl shadow-lg">
+                            <h3 className="font-orbitron text-xl text-white mb-4 border-l-4 border-red-600 pl-3">ACERCA DEL CIRCUITO</h3>
+                            {circuitDescription ? (
+                                <div className="text-gray-300 leading-relaxed space-y-4 text-sm sm:text-base" dangerouslySetInnerHTML={{ __html: circuitDescription }} />
+                            ) : (
+                                <p className="text-gray-500 italic">Descripción disponible dentro de poco.</p>
+                            )}
+                        </div>
+                        
+                         {getTrackImage(event) && (
+                            <div className="card-bg p-6 rounded-xl shadow-lg flex justify-center items-center bg-gray-900">
+                                <img src={getTrackImage(event)!} alt="Track Layout" className="w-full max-w-lg h-auto invert brightness-0 filter drop-shadow-lg opacity-90" />
+                            </div>
+                         )}
+                    </div>
+
+                    {/* COLUMNA DERECHA: Datos Técnicos */}
+                    <div className="lg:col-span-1">
+                         <div className="card-bg p-6 rounded-xl shadow-lg h-full">
+                            <h3 className="font-orbitron text-xl text-white mb-6 border-l-4 border-red-600 pl-3">ESPECIFICACIONES</h3>
+                            
+                            {track ? (
+                                <div className="space-y-6">
+                                    <div className="border-l-2 border-red-600 pl-4">
+                                        <p className="text-gray-500 text-xs uppercase">Longitud total</p>
+                                        <p className="text-2xl font-bold text-white font-orbitron">
+                                            {track.lenght_units?.kiloMeters}KM <span className="text-gray-600 text-lg">/ {track.lenght_units?.miles} MILES</span>
+                                        </p>
+                                    </div>
+                                    <div className="border-l-2 border-red-600 pl-4">
+                                        <p className="text-gray-500 text-xs uppercase">Ancho de pista</p>
+                                        <p className="text-2xl font-bold text-white font-orbitron">
+                                            {track.width_units?.meters}M <span className="text-gray-600 text-lg">/ {track.width_units?.feet} FT</span>
+                                        </p>
+                                    </div>
+                                    <div className="border-l-2 border-red-600 pl-4">
+                                        <p className="text-gray-500 text-xs uppercase">Recta más larga</p>
+                                        <p className="text-2xl font-bold text-white font-orbitron">
+                                            {track.longest_straight_units?.meters}M <span className="text-gray-600 text-lg">/ {track.longest_straight_units?.feet} FT</span>
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 pt-4">
+                                         <div className="border-l-2 border-red-600 pl-4">
+                                            <p className="text-gray-500 text-xs uppercase">Curvas Izq.</p>
+                                            <p className="text-3xl font-bold text-white font-orbitron">{track.left_corners}</p>
+                                        </div>
+                                        <div className="border-l-2 border-red-600 pl-4">
+                                            <p className="text-gray-500 text-xs uppercase">Curvas Der.</p>
+                                            <p className="text-3xl font-bold text-white font-orbitron">{track.right_corners}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-40 text-center">
+                                    <p className="text-gray-500 font-bold text-lg">Información disponible<br/>dentro de poco</p>
+                                </div>
+                            )}
+                         </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MotoGpCircuitsView({ onBack, onEventSelect }: { onBack: () => void, onEventSelect: (event: ApiBroadcastEvent) => void }) {
+    const [events, setEvents] = useState<ApiBroadcastEvent[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState<'GP' | 'TEST'>('GP');
+
+    useEffect(() => {
+        const loadEvents = async () => {
+            setLoading(true);
+            try {
+                const data = await fetchBroadcastEvents(2026);
+                setEvents(data);
+            } catch (error) {
+                console.error("Error cargando eventos:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadEvents();
+    }, []);
+
+    const filteredEvents = useMemo(() => {
+        // 1. Filtrar por tipo
+        const filtered = events.filter(e => {
+            if (activeFilter === 'GP') return e.kind === 'GP';
+            return e.kind !== 'GP';
+        });
+
+        // 2. Separar en finalizados y no finalizados
+        const finished = filtered.filter(e => e.status === 'FINISHED');
+        const upcoming = filtered.filter(e => e.status !== 'FINISHED');
+
+        // 3. Ordenar cada grupo cronológicamente
+        const sortByDate = (a: ApiBroadcastEvent, b: ApiBroadcastEvent) => 
+            new Date(a.date_start).getTime() - new Date(b.date_start).getTime();
+
+        finished.sort(sortByDate);
+        upcoming.sort(sortByDate);
+
+        // 4. Retornar dos arrays: Próximo evento (si existe) y el resto
+        const nextEvent = upcoming.length > 0 ? upcoming[0] : null;
+        const otherEvents = upcoming.length > 0 ? [...upcoming.slice(1), ...finished] : finished;
+
+        return { nextEvent, otherEvents };
+    }, [events, activeFilter]);
+
+    const formatDateRange = (start: string, end: string) => {
+        try {
+            const d1 = new Date(start);
+            const d2 = new Date(end);
+            // Formato ejemplo: 27 FEB - 01 MAR
+            const m1 = d1.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+            const m2 = d2.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase();
+            const day1 = d1.getDate().toString().padStart(2, '0');
+            const day2 = d2.getDate().toString().padStart(2, '0');
+            
+            if (m1 === m2) return `${day1} - ${day2} ${m1}`;
+            return `${day1} ${m1} - ${day2} ${m2}`;
+        } catch (e) {
+            return 'TBC';
+        }
+    };
+
+    // Helper para obtener imagen
+    const getEventImage = (event: ApiBroadcastEvent) => {
+        const bg = event.assets.find(a => a.type === 'BACKGROUND');
+        if (bg) return bg.path;
+        const top = event.assets.find(a => a.type === 'TOP');
+        if (top) return top.path;
+        return null; 
+    };
+
+    const getEventFlag = (event: ApiBroadcastEvent) => {
+        const flag = event.assets.find(a => a.type === 'FLAG');
+        return flag ? flag.path : null;
+    };
+
+    const getTrackImage = (event: ApiBroadcastEvent) => {
+        // Intentamos acceder al track simple path dentro de la estructura anidada
+        return event.circuit?.track?.assets?.simple?.path || null;
+    };
+
+    const translateSessionName = (shortName: string, name: string): string => {
+        if (shortName.includes('FP') || name.toLowerCase().includes('free practice')) return shortName.replace('FP', 'Free Practice Nr. ');
+        if (shortName === 'PR' || name.toLowerCase().includes('practice')) return 'Practice';
+        if (shortName.includes('Q')) return shortName.replace('Q', 'Qualifying Nr. ');
+        if (shortName === 'SPR' || name.toLowerCase().includes('sprint')) return 'Tissot Sprint';
+        if (shortName === 'WUP' || name.toLowerCase().includes('warm up')) return 'Warm Up';
+        if (shortName === 'RAC' || name.toLowerCase().includes('race') || name.toLowerCase().includes('grand prix')) return 'Grand Prix';
+        return name; // Fallback
+    };
+
+    const formatSessionTime = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return '--:--';
+        }
+    };
+
+    const formatSessionDay = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase();
+        } catch (e) {
+            return '---';
+        }
+    };
+
+    return (
+        <div className="animate-fade-in pb-10">
+            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
+                &larr; Volver al menú
+            </button>
+
+            <div className="flex justify-center gap-4 mb-8">
+                <button
+                    onClick={() => setActiveFilter('GP')}
+                    className={`px-6 py-2 rounded-full font-bold transition-all transform hover:scale-105 ${
+                        activeFilter === 'GP'
+                        ? 'motogp-red-bg text-white shadow-lg'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                >
+                    Calendario GPs
+                </button>
+                <button
+                    onClick={() => setActiveFilter('TEST')}
+                    className={`px-6 py-2 rounded-full font-bold transition-all transform hover:scale-105 ${
+                        activeFilter === 'TEST'
+                        ? 'motogp-red-bg text-white shadow-lg'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                >
+                    TESTs y Eventos
+                </button>
+            </div>
+
+            {loading ? (
+                 <div className="text-center py-12">
+                     <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                     <p className="mt-4 text-gray-400">Cargando calendario...</p>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-6">
+                    {/* TARJETA DESTACADA: PRÓXIMO GP */}
+                    {filteredEvents.nextEvent && (
+                        <div 
+                            onClick={() => onEventSelect(filteredEvents.nextEvent!)}
+                            className="relative w-full bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-700 mb-4 group cursor-pointer transition-transform hover:scale-[1.01]"
+                        >
+                            <div className="absolute top-0 left-0 bg-red-600 text-white text-xs font-bold px-4 py-1 z-20 uppercase tracking-widest skew-x-[-10deg] -ml-2">
+                                <span className="skew-x-[10deg] inline-block">SIGUIENTE</span>
+                            </div>
+                            
+                            <div className="flex flex-col lg:flex-row h-auto lg:min-h-[350px]">
+                                {/* Imagen de Fondo y Detalles (Izquierda) */}
+                                <div className="relative lg:w-7/12 h-64 lg:h-auto overflow-hidden">
+                                    <div className="absolute inset-0 bg-black/50 z-10"></div>
+                                    {getEventImage(filteredEvents.nextEvent) && (
+                                        <img 
+                                            src={getEventImage(filteredEvents.nextEvent)!} 
+                                            alt="Circuit Background" 
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                                        />
+                                    )}
+                                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/90 via-transparent to-transparent lg:bg-gradient-to-r lg:from-transparent lg:to-black/90"></div>
+                                    
+                                    <div className="absolute top-10 left-6 z-20 flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                            {getEventFlag(filteredEvents.nextEvent) && (
+                                                <img src={getEventFlag(filteredEvents.nextEvent)!} className="h-5 w-auto shadow-sm" alt="Flag" />
+                                            )}
+                                            <span className="text-gray-300 font-orbitron text-sm tracking-widest">
+                                                {formatDateRange(filteredEvents.nextEvent.date_start, filteredEvents.nextEvent.date_end)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-6xl font-bold text-white/20 font-orbitron select-none">{filteredEvents.nextEvent.sequence}</span>
+                                            <div>
+                                                <h2 className="text-4xl font-black text-white uppercase leading-none font-orbitron">
+                                                    {filteredEvents.nextEvent.additional_name || filteredEvents.nextEvent.name}
+                                                </h2>
+                                                <p className="text-gray-400 text-sm uppercase tracking-wide mt-1">{filteredEvents.nextEvent.circuit.city || filteredEvents.nextEvent.circuit.name}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Track Layout Overlay (Ahora blanco/invertido) - REPOSICIONADO */}
+                                    {getTrackImage(filteredEvents.nextEvent) && (
+                                        <div className="absolute -bottom-12 -right-12 lg:bottom-[-50px] lg:right-[-50px] lg:left-auto z-20 w-64 opacity-80">
+                                            <img src={getTrackImage(filteredEvents.nextEvent)!} alt="Track Layout" className="w-full h-auto invert brightness-0 filter drop-shadow-lg" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Tabla de Horarios (Derecha) - SIN SCROLL Y TODAS LAS SESIONES */}
+                                <div className="lg:w-5/12 bg-black/80 backdrop-blur-sm p-6 flex flex-col justify-center border-l border-gray-800">
+                                    <div className="flex justify-between items-baseline mb-2">
+                                        <h3 className="font-orbitron text-2xl text-white uppercase">MotoGP™ - Horarios</h3>
+                                    </div>
+                                    <p className="text-gray-500 text-xs mb-4">Todas las sesiones están en tu zona horaria</p>
+                                    
+                                    <div className="space-y-2">
+                                        {filteredEvents.nextEvent.broadcasts && filteredEvents.nextEvent.broadcasts.length > 0 ? (
+                                            filteredEvents.nextEvent.broadcasts
+                                                .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime())
+                                                .map((session, idx) => (
+                                                <div key={idx} className="flex justify-between items-center border-b border-gray-800/50 pb-1 last:border-0">
+                                                    <span className="text-gray-400 font-mono text-xs font-bold min-w-[80px]">
+                                                        {formatSessionDay(session.date_start)} / {formatSessionTime(session.date_start)}
+                                                    </span>
+                                                    <span className="text-gray-200 text-sm font-bold text-right truncate ml-2">
+                                                        {translateSessionName(session.shortname, session.name)}
+                                                    </span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-gray-500 text-center text-sm py-6">Horarios disponibles dentro de poco</p>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="mt-auto pt-4">
+                                         <div className="w-full bg-red-600 h-10 rounded flex items-center justify-center text-white font-bold uppercase tracking-widest text-sm shadow-lg hover:bg-red-500 transition-colors">
+                                             VER FICHA DEL GP
+                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* GRID DE TARJETAS ESTÁNDAR */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredEvents.otherEvents.map(event => {
+                            const isFinished = event.status === 'FINISHED';
+                            const flag = getEventFlag(event);
+                            const track = getTrackImage(event);
+                            const bgImage = getEventImage(event); // Usamos imagen de fondo si hay
+                            
+                            return (
+                                <div 
+                                    key={event.id}
+                                    onClick={() => onEventSelect(event)}
+                                    className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-lg border ${isFinished ? 'border-red-900/30 opacity-70' : 'border-gray-700'} hover:border-gray-500 transition-all duration-300 group flex cursor-pointer h-32`}
+                                >
+                                    {/* INFO IZQUIERDA (Texto y Bandera) */}
+                                    <div className="w-2/5 bg-white p-4 flex flex-col justify-between relative z-10">
+                                        <div className="flex items-center gap-2">
+                                            {flag && <img src={flag} className="h-4 w-auto shadow-sm" alt={event.country} />}
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
+                                                {formatDateRange(event.date_start, event.date_end)}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="mt-auto relative">
+                                            <span className="text-5xl font-black text-gray-200 absolute bottom-[-10px] left-[-10px] select-none z-0 font-orbitron opacity-40">
+                                                {event.sequence}
+                                            </span>
+                                            <h3 className="text-black font-black uppercase leading-tight text-sm relative z-10 font-orbitron break-words w-full">
+                                                {event.additional_name || event.name}
+                                            </h3>
+                                            <p className="text-gray-500 text-[9px] uppercase font-bold truncate mt-0.5 relative z-10">
+                                                {event.circuit.city || event.country}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* DERECHA (Imagen o Trazado) */}
+                                    <div className="w-3/5 relative overflow-hidden bg-gray-800">
+                                        {/* Imagen de fondo sutil */}
+                                        {bgImage && (
+                                             <img src={bgImage} className="absolute inset-0 w-full h-full object-cover opacity-40 grayscale group-hover:grayscale-0 transition-all duration-500" alt="bg" />
+                                        )}
+                                        <div className="absolute inset-0 bg-gradient-to-l from-transparent to-gray-900/50"></div>
+
+                                        {/* Trazado en blanco */}
+                                        {track ? (
+                                            <div className="absolute inset-0 flex items-center justify-center p-4">
+                                                <img src={track} className="w-full h-full object-contain invert brightness-0 filter drop-shadow-md opacity-90 transform group-hover:scale-110 transition-transform duration-500" alt="track" />
+                                            </div>
+                                        ) : (
+                                             <div className="absolute inset-0 flex items-center justify-center">
+                                                <FlagIcon className="text-gray-700 w-12 h-12" />
+                                             </div>
+                                        )}
+
+                                        {isFinished && (
+                                            <div className="absolute top-2 right-2 bg-red-600/90 text-white text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+                                                Finalizado
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
     const [currentView, setCurrentView] = useState<MotoGpDataView>('menu');
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
+    const [selectedEvent, setSelectedEvent] = useState<ApiBroadcastEvent | null>(null);
 
     const handleRiderSelect = (riderId: string) => {
         setSelectedRiderId(riderId);
         setCurrentView('profile');
+    };
+    
+    const handleEventSelect = (event: ApiBroadcastEvent) => {
+        setSelectedEvent(event);
+        setCurrentView('circuit_detail');
     };
 
     const renderContent = () => {
@@ -2544,18 +3139,9 @@ function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
                     <MotoGpRidersView onRiderSelect={handleRiderSelect} onBack={() => setCurrentView('menu')} />
                 );
             case 'circuits':
-                 return (
-                    <div className="card-bg p-8 rounded-xl shadow-lg text-center animate-fade-in">
-                         <button onClick={() => setCurrentView('menu')} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                            &larr; Volver al menú
-                        </button>
-                        <div className="flex flex-col items-center justify-center py-12">
-                            <FlagIcon className="w-16 h-16 text-gray-500 mb-4" />
-                            <h3 className="text-2xl font-orbitron text-white mb-2">Sección Circuitos</h3>
-                            <p className="text-gray-400">Aquí se mostrará el calendario y detalles de los circuitos.</p>
-                        </div>
-                    </div>
-                );
+                 return <MotoGpCircuitsView onBack={() => setCurrentView('menu')} onEventSelect={handleEventSelect} />;
+            case 'circuit_detail':
+                 return selectedEvent ? <MotoGpEventDetailView event={selectedEvent} onBack={() => setCurrentView('circuits')} /> : null;
             default:
                 return null;
         }

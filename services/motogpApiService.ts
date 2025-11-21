@@ -1,4 +1,5 @@
-import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider, RiderStats, RiderSeasonStat, ApiEvent, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationResponse } from '../types';
+
+import type { CircuitResult, RaceResult, LiveTimingData, ApiSeason, ApiCategory, ApiRider, RiderStats, RiderSeasonStat, ApiEvent, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationResponse, ApiBroadcastEvent } from '../types';
 
 const PROXY_URL = 'https://autumn-shape-d3e8.inigoggrijalba.workers.dev/?url=';
 const API_BASE_URL = 'https://api.motogp.pulselive.com/motogp/v1';
@@ -126,6 +127,10 @@ export const fetchSessionClassification = async (sessionId: string): Promise<Api
 
 export const fetchAllRiders = async (): Promise<ApiRider[]> => {
     return apiFetch<ApiRider[]>('/riders');
+};
+
+export const fetchBroadcastEvents = async (seasonYear: number): Promise<ApiBroadcastEvent[]> => {
+    return apiFetch<ApiBroadcastEvent[]>(`/events?seasonYear=${seasonYear}`);
 };
 
 // --- Funciones Legacy (se mantienen para detalles específicos) ---
