@@ -3159,34 +3159,70 @@ function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
     const [selectedEvent, setSelectedEvent] = useState<ApiBroadcastEvent | null>(null);
 
+    // Manejo del historial de navegación dentro de la pestaña
+    useEffect(() => {
+        // Restaurar estado si existe en el historial al montar
+        if (window.history.state?.motogpView) {
+            setCurrentView(window.history.state.motogpView);
+            if (window.history.state.riderId) setSelectedRiderId(window.history.state.riderId);
+            if (window.history.state.event) setSelectedEvent(window.history.state.event);
+        }
+
+        const handlePopState = (event: PopStateEvent) => {
+            if (event.state && event.state.motogpView) {
+                setCurrentView(event.state.motogpView);
+                if (event.state.riderId) setSelectedRiderId(event.state.riderId);
+                if (event.state.event) setSelectedEvent(event.state.event);
+            } else {
+                // Si no hay estado específico de MotoGP (ej. volvimos al inicio de la pestaña), mostramos el menú
+                setCurrentView('menu');
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    // Funciones auxiliares para navegar y guardar historial
+    const navigateTo = (view: MotoGpDataView, extraState: any = {}) => {
+        const newState = { motogpView: view, ...extraState };
+        window.history.pushState(newState, '');
+        setCurrentView(view);
+        if (extraState.riderId) setSelectedRiderId(extraState.riderId);
+        if (extraState.event) setSelectedEvent(extraState.event);
+    };
+
     const handleRiderSelect = (riderId: string) => {
-        setSelectedRiderId(riderId);
-        setCurrentView('profile');
+        navigateTo('profile', { riderId });
     };
     
     const handleEventSelect = (event: ApiBroadcastEvent) => {
-        setSelectedEvent(event);
-        setCurrentView('circuit_detail');
+        navigateTo('circuit_detail', { event });
+    };
+
+    const handleBackToMenu = () => {
+        // Intentar usar back del navegador si es posible para mantener consistencia
+        window.history.back();
     };
 
     const renderContent = () => {
         switch (currentView) {
             case 'menu':
-                return <MotoGpDataMenu onSelectView={setCurrentView} />;
+                return <MotoGpDataMenu onSelectView={(view) => navigateTo(view)} />;
             case 'results':
-                return <MotoGpResultsView onBack={() => setCurrentView('menu')} />;
+                return <MotoGpResultsView onBack={handleBackToMenu} />;
             case 'riders':
-                return <MotoGpRidersView onRiderSelect={handleRiderSelect} onBack={() => setCurrentView('menu')} />;
+                return <MotoGpRidersView onRiderSelect={handleRiderSelect} onBack={handleBackToMenu} />;
             case 'profile':
                 return selectedRiderId ? (
-                    <RiderProfileView riderId={selectedRiderId} onBack={() => setCurrentView('riders')} data={data} />
+                    <RiderProfileView riderId={selectedRiderId} onBack={handleBackToMenu} data={data} />
                 ) : (
-                    <MotoGpRidersView onRiderSelect={handleRiderSelect} onBack={() => setCurrentView('menu')} />
+                    <MotoGpRidersView onRiderSelect={handleRiderSelect} onBack={handleBackToMenu} />
                 );
             case 'circuits':
-                 return <MotoGpCircuitsView onBack={() => setCurrentView('menu')} onEventSelect={handleEventSelect} />;
+                 return <MotoGpCircuitsView onBack={handleBackToMenu} onEventSelect={handleEventSelect} />;
             case 'circuit_detail':
-                 return selectedEvent ? <MotoGpEventDetailView event={selectedEvent} onBack={() => setCurrentView('circuits')} /> : null;
+                 return selectedEvent ? <MotoGpEventDetailView event={selectedEvent} onBack={handleBackToMenu} /> : null;
             default:
                 return null;
         }
@@ -3204,7 +3240,14 @@ export default function App() {
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+    // Inicializar activeTab desde el hash de la URL
+    const getTabFromHash = (): Tab => {
+        const hash = window.location.hash.replace('#', '');
+        const validTabs = TABS.map(t => t.tab);
+        // Si el hash corresponde a una tab válida, usarla. Si no, default a 'dashboard'
+        return validTabs.includes(hash as Tab) ? (hash as Tab) : 'dashboard';
+    };
+    const [activeTab, setActiveTab] = useState<Tab>(getTabFromHash());
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -3248,10 +3291,18 @@ export default function App() {
             });
         }
 
+        // Listener para cambios de hash (Navegación por pestañas)
+        const handleHashChange = () => {
+            setActiveTab(getTabFromHash());
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+
     }, [fetchData]);
 
     const handleSetTab = (tab: Tab) => {
-        setActiveTab(tab);
+        // Actualizar el hash en lugar del estado directamente
+        window.location.hash = tab;
         setIsMenuOpen(false);
     }
 
@@ -3277,7 +3328,7 @@ export default function App() {
 
         switch (activeTab) {
             case 'dashboard':
-                return <DashboardTab data={motoGpData} setActiveTab={setActiveTab} />;
+                return <DashboardTab data={motoGpData} setActiveTab={handleSetTab} />; // Usar handleSetTab para actualizar Hash
             case 'standings':
                 return <StandingsTab data={motoGpData} />;
             case 'statistics':
@@ -3364,7 +3415,7 @@ export default function App() {
                         </button>
                     ) : (
                         <button
-                            onClick={() => setActiveTab('livetiming')}
+                            onClick={() => handleSetTab('livetiming')} // LiveTiming es una tab especial, handleSetTab lo maneja por hash
                             className="motogp-red-bg text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm whitespace-nowrap hover:bg-red-700"
                         >
                             LiveTiming
