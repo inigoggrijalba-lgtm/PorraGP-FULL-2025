@@ -315,7 +315,7 @@ function StatCard({ title, value, metric, icon }: { title: string, value: string
             <div>
                 <p className="text-sm text-gray-400">{title}</p>
                 <p className="text-lg sm:text-2xl font-bold text-white font-orbitron truncate">{value}</p>
-                <p className="text-xs sm:text-sm text-green-500">{metric}</p>
+                <p className="text-xs sm:text-sm text-green-500 font-bold font-orbitron tracking-wider">{metric}</p>
             </div>
         </div>
     );
@@ -727,6 +727,7 @@ function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: Moto
 function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: (tab: Tab) => void }) {
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
     const [installModalOS, setInstallModalOS] = useState<'android' | 'ios' | null>(null);
+    const [nextApiEvent, setNextApiEvent] = useState<ApiBroadcastEvent | null>(null);
 
     const leader = data.standings && data.standings.length > 0 ? data.standings[0] : undefined;
     const mostVotedDriver = data.driverVoteCounts && data.driverVoteCounts.length > 0 ? data.driverVoteCounts[0] : undefined;
@@ -749,6 +750,24 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
         }
         return { race: null, seasonOver: true };
     }, [data.races]);
+
+    // Fetch oficial next event from API
+    useEffect(() => {
+        const loadNextEvent = async () => {
+            try {
+                const events = await fetchBroadcastEvents(2025);
+                const upcoming = events
+                    .filter(e => e.kind === 'GP' && e.status !== 'FINISHED')
+                    .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+                if (upcoming.length > 0) {
+                    setNextApiEvent(upcoming[0]);
+                }
+            } catch (e) {
+                console.error("Error fetching next event for dashboard", e);
+            }
+        }
+        loadNextEvent();
+    }, []);
     
     const votesForNextRace = useMemo(() => {
         if (!nextRaceInfo.race) return [];
@@ -761,14 +780,40 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
         })).sort((a, b) => a.player.localeCompare(b.player));
     }, [data, nextRaceInfo.race]);
 
+    const getNextRaceTimeInfo = () => {
+        if (nextApiEvent) {
+            const getSessionTime = (shortname: string) => {
+                const session = nextApiEvent.broadcasts.find(b => (b.shortname === shortname || (shortname === 'RAC' && b.shortname === 'RACE')) && b.category.name === 'MotoGP');
+                if (!session) return 'TBC';
+                try {
+                    const d = new Date(session.date_start);
+                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                } catch (e) {
+                    return 'TBC';
+                }
+            };
+
+            const sprTime = getSessionTime('SPR');
+            const racTime = getSessionTime('RAC'); 
+
+            return `SPR:${sprTime} RACE:${racTime}`;
+        }
+        // Fallback
+        return nextRaceInfo.seasonOver ? 'Gracias por participar' : (nextRaceInfo.race ? `${nextRaceInfo.race.date} - ${nextRaceInfo.race.time}` : 'TBC');
+    };
+
+    const nextRaceName = nextApiEvent 
+        ? (nextApiEvent.additional_name || nextApiEvent.name)
+        : (nextRaceInfo.seasonOver ? 'TEMPORADA FINALIZADA' : (nextRaceInfo.race?.circuit ?? 'N/A'));
+
     return (
         <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard title="Líder del Campeonato" value={leader ? leader.player : 'N/A'} metric={leader ? `${leader.totalPoints} Pts` : '-'} icon={<TrophyIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
                 <StatCard 
                     title="Próxima Carrera" 
-                    value={nextRaceInfo.seasonOver ? 'TEMPORADA FINALIZADA' : (nextRaceInfo.race?.circuit ?? 'N/A')} 
-                    metric={nextRaceInfo.seasonOver ? 'Gracias por participar' : (nextRaceInfo.race ? `${nextRaceInfo.race.date} - ${nextRaceInfo.race.time}` : 'TBC')} 
+                    value={nextRaceName}
+                    metric={getNextRaceTimeInfo()} 
                     icon={<FlagIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} 
                 />
                 <StatCard title="Piloto más Votado (Global)" value={mostVotedDriver ? mostVotedDriver.driver : 'N/A'} metric={mostVotedDriver ? `${mostVotedDriver.totalVotes} Votos` : '-'} icon={<SparklesIcon className="w-6 h-6 sm:w-8 sm:h-8"/>} />
@@ -3154,7 +3199,7 @@ function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
     );
 }
 
-export function App() {
+export default function App() {
     const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);

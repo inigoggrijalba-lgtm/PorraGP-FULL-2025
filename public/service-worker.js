@@ -1,5 +1,5 @@
 // Un Service Worker simple con estrategia "cache-first"
-const CACHE_NAME = 'porragp-cache-v1';
+const CACHE_NAME = 'porragp-cache-v2';
 // No podemos conocer los nombres de los archivos de compilación, así que cacheamos lo esencial.
 // Idealmente, el proceso de compilación inyectaría una lista más completa.
 const urlsToCache = [

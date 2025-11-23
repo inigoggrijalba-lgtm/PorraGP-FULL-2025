@@ -9,20 +9,40 @@
   "theme_color": "#E50914",
   "icons": [
     {
-      "src": "icons/icon-192x192.png",
+      "src": "icons/android/android-launchericon-192-192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "icons/android/android-launchericon-512-512.png",
       "type": "image/png",
       "sizes": "512x512"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "icons/android/android-launchericon-512-512.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/screenshot1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Clasificación General"
+    },
+    {
+      "src": "screenshots/screenshot2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Análisis de Evolución"
+    },
+    {
+      "src": "screenshots/screenshot3.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "label": "Resultados del Circuito"
     }
   ]
 }
