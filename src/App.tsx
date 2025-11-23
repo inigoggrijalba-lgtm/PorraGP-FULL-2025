@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
@@ -195,10 +194,10 @@ const TABS: { name: string; tab: Tab }[] = [
     { name: "Clasificación Porra", tab: "standings" },
     { name: "Votar", tab: "votar" },
     { name: "Resultados Porra", tab: "circuits" },
-    { name: "MotoGP Data", tab: "motogp_data" },
+    { name: "Estadísticas Porra", tab: "statistics" },
     { name: "Votos pilotos", tab: "participantes" },
-    { name: "Estadísticas", tab: "statistics" },
-    { name: "Noticias", tab: "noticias" },
+    { name: "MotoGP Data", tab: "motogp_data" },
+    { name: "Noticias MotoGP", tab: "noticias" },
 ];
 
 // Se ha extraído el botón de actualizar a su propio componente para mayor claridad y reutilización.
@@ -1611,68 +1610,139 @@ function HistoryModal({ legacyId, riderName, onClose }: { legacyId: number; ride
 }
 
 
-// Helper to render the "Current Season" chart based on CSV Data
+// Responsive Chart Component with Max Y 25 and Differentiated Series
 const CurrentSeasonChart = ({ labels, sprintPoints, racePoints }: { labels: string[], sprintPoints: number[], racePoints: number[] }) => {
-    const height = 200;
-    const maxY = 40; // Scale mostly up to 25/37 points max per weekend part
-    
-    const getY = (val: number) => height - (val / maxY) * height;
-    const getX = (idx: number, total: number) => (idx / (total - 1)) * 100;
+    if (labels.length === 0) return <div className="h-48 flex items-center justify-center text-gray-500 font-orbitron">Sin datos de carrera aún</div>;
 
-    if (labels.length === 0) return <div className="h-48 flex items-center justify-center text-gray-500">Sin datos de carrera aún</div>;
+    // Configuración de la gráfica
+    const maxY = 25;
+    const chartHeight = 250; // Altura interna SVG (no pixeles pantalla)
+    const chartWidth = 800; // Ancho base interno SVG
+    const padding = { top: 20, bottom: 40, left: 40, right: 20 };
+    
+    const graphWidth = chartWidth - padding.left - padding.right;
+    const graphHeight = chartHeight - padding.top - padding.bottom;
+
+    // Escalas
+    const getX = (index: number) => padding.left + (index / (labels.length - 1 || 1)) * graphWidth;
+    const getY = (value: number) => padding.top + graphHeight - (Math.min(value, maxY) / maxY) * graphHeight;
+
+    // Generar paths
+    const generatePath = (points: number[]) => {
+        if (points.length === 0) return '';
+        return points.map((p, i) => `${getX(i)},${getY(p)}`).join(' ');
+    };
+
+    const racePath = generatePath(racePoints);
+    const sprintPath = generatePath(sprintPoints);
 
     return (
-        <div className="w-full h-64 relative mt-4">
-            {/* Y Axis Labels */}
-            <div className="absolute inset-0 left-0 w-8 flex flex-col justify-between text-[10px] text-gray-500 py-6" style={{ height: '100%' }}>
-                {[40, 35, 30, 25, 20, 15, 10, 5, 0].map(val => (
-                     <span key={val} className="text-right pr-1" style={{ position: 'absolute', top: getY(val) + 10, width: '100%' }}>{val}</span>
-                ))}
+        <div className="w-full bg-[#1e1e1e] flex flex-col">
+            {/* Leyenda */}
+            <div className="flex justify-end gap-4 px-4 pt-2 mb-2 text-xs font-bold font-orbitron">
+                <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-[#E50914] rounded-full"></div> <span className="text-gray-300">RACE</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 border-2 border-[#00A651] bg-[#1e1e1e] rounded-full"></div> <span className="text-gray-300">SCR</span>
+                </div>
             </div>
 
-            {/* Chart Area */}
-            <div className="absolute inset-0 left-8 right-2 bottom-6 top-6 border-l border-b border-gray-700">
-                {/* Grid lines */}
-                 {[40, 35, 30, 25, 20, 15, 10, 5].map(val => (
-                    <div key={val} className="absolute w-full border-t border-gray-800" style={{ top: getY(val) }}></div>
-                 ))}
+            {/* Contenedor SVG Responsive */}
+            <div className="relative w-full aspect-[16/9] max-h-[300px]">
+                <svg 
+                    viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
+                    className="w-full h-full overflow-visible"
+                    preserveAspectRatio="none"
+                >
+                    {/* Rejilla Horizontal y Etiquetas Eje Y */}
+                    {[0, 5, 10, 15, 20, 25].map((val) => {
+                        const y = getY(val);
+                        return (
+                            <g key={val}>
+                                <line 
+                                    x1={padding.left} 
+                                    y1={y} 
+                                    x2={chartWidth - padding.right} 
+                                    y2={y} 
+                                    stroke="#333" 
+                                    strokeWidth="1" 
+                                    strokeDasharray={val === 0 ? "0" : "4"}
+                                />
+                                <text 
+                                    x={padding.left - 8} 
+                                    y={y + 4} 
+                                    fill="#666" 
+                                    textAnchor="end" 
+                                    fontSize="12" 
+                                    fontFamily="Orbitron, sans-serif"
+                                >
+                                    {val}
+                                </text>
+                            </g>
+                        );
+                    })}
 
-                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
-                     {/* Race Line (Red) */}
-                     <polyline 
-                        points={racePoints.map((p, i) => `${getX(i, labels.length)}%,${getY(p)}`).join(' ')}
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="2"
-                    />
-                    {/* Sprint Line (Green) */}
-                     <polyline 
-                        points={sprintPoints.map((p, i) => `${getX(i, labels.length)}%,${getY(p)}`).join(' ')}
-                        fill="none"
-                        stroke="#22c55e"
-                        strokeWidth="2"
-                        strokeDasharray="4"
-                    />
-                    
-                    {racePoints.map((p, i) => (
-                         <circle key={`r-${i}`} cx={`${getX(i, labels.length)}%`} cy={getY(p)} r="3" fill="#ef4444" className="hover:r-4 transition-all" />
+                    {/* Eje X - Etiquetas */}
+                    {labels.map((label, i) => (
+                        <text 
+                            key={i} 
+                            x={getX(i)} 
+                            y={chartHeight - 10} 
+                            fill="#888" 
+                            textAnchor="middle" 
+                            fontSize="10" 
+                            fontFamily="sans-serif"
+                            transform={`rotate(0, ${getX(i)}, ${chartHeight - 10})`} // Rotación opcional si hay muchos
+                        >
+                            {label}
+                        </text>
                     ))}
-                     {sprintPoints.map((p, i) => (
-                         <circle key={`s-${i}`} cx={`${getX(i, labels.length)}%`} cy={getY(p)} r="2" fill="#22c55e" />
+
+                    {/* Línea SPRINT (Verde Punteada) */}
+                    <polyline 
+                        points={sprintPath}
+                        fill="none"
+                        stroke="#00A651"
+                        strokeWidth="2"
+                        strokeDasharray="6 4"
+                        strokeOpacity="0.8"
+                    />
+                    {/* Puntos SPRINT (Huecos) */}
+                    {sprintPoints.map((p, i) => (
+                        <circle 
+                            key={`s-${i}`} 
+                            cx={getX(i)} 
+                            cy={getY(p)} 
+                            r="4" 
+                            fill="#1e1e1e" 
+                            stroke="#00A651" 
+                            strokeWidth="2"
+                        />
+                    ))}
+
+                    {/* Línea RACE (Roja Sólida) */}
+                    <polyline 
+                        points={racePath}
+                        fill="none"
+                        stroke="#E50914"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                    {/* Puntos RACE (Sólidos) */}
+                    {racePoints.map((p, i) => (
+                        <circle 
+                            key={`r-${i}`} 
+                            cx={getX(i)} 
+                            cy={getY(p)} 
+                            r="4" 
+                            fill="#E50914" 
+                            stroke="#1e1e1e" 
+                            strokeWidth="1"
+                        />
                     ))}
                 </svg>
-            </div>
-            
-            {/* X Axis Labels */}
-            <div className="absolute bottom-0 left-8 right-2 flex justify-between text-[9px] text-gray-400">
-                {labels.map((track, i) => (
-                     <span key={i} className="transform -rotate-45 origin-top-left translate-y-2 w-4">{track}</span>
-                ))}
-            </div>
-
-             <div className="absolute top-0 right-0 flex gap-4 text-[10px]">
-                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-full"></div> <span className="text-gray-400">RACE</span></div>
-                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-green-500 rounded-full"></div> <span className="text-gray-400">SPR</span></div>
             </div>
         </div>
     );
@@ -1756,18 +1826,25 @@ function RiderProfileView({ riderId, onBack, data }: { riderId: string; onBack: 
         if (!data || !rider) return { labels: [], sprint: [], race: [] };
 
         const mapApiRiderToCsvName = (name: string, surname: string) => {
-            // Mapeos específicos según prompt
-            if (surname === 'Marquez') {
-                return name === 'Marc' ? 'M. Marquez' : 'A. Marquez';
+            const n = name.trim();
+            const s = surname.trim();
+            // Normalizar apellido para comprobación de casos (ignorando acentos y case)
+            const sLower = s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            // Casos específicos definidos por el usuario
+            if (sLower === 'marquez') {
+                return n === 'Marc' ? 'M. Marquez' : 'A. Marquez';
             }
-            if (surname === 'Espargaro') {
-                return name === 'Aleix' ? 'A. Espargaro' : 'P. Espargaro';
+            if (sLower === 'espargaro') {
+                return n === 'Aleix' ? 'A. Espargaro' : 'P. Espargaro';
             }
-            if (surname === 'Fernandez') {
-                return name === 'Raul' ? 'R. Fernandez' : 'A. Fernandez';
+            if (sLower === 'fernandez') {
+                if (n === 'Augusto') return 'A. Fernandez';
+                if (n === 'Raul') return 'Fernandez';
             }
-            // Default logic: Initial. Surname
-            return `${name.charAt(0)}. ${surname}`;
+            
+            // El resto de casos, siempre coincidirá con su apellido.
+            return s;
         };
 
         const csvName = mapApiRiderToCsvName(rider.name, rider.surname);
@@ -1775,15 +1852,31 @@ function RiderProfileView({ riderId, onBack, data }: { riderId: string; onBack: 
         const sprintPoints: number[] = [];
         const racePoints: number[] = [];
 
+        // Helper para buscar driver con tolerancia a acentos si no es un caso formateado
+        const findDriver = (list: RaceResult[], targetName: string) => {
+            // 1. Búsqueda exacta
+            let found = list.find(r => r.driver === targetName);
+            if (found) return found;
+
+            // 2. Búsqueda normalizada (para apellidos simples como Martín vs Martin)
+            // Solo si no contiene punto, lo que indicaría una inicial formateada que requiere exactitud
+            if (!targetName.includes('.')) {
+                 const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                 const targetNorm = normalize(targetName);
+                 found = list.find(r => normalize(r.driver) === targetNorm);
+            }
+            return found;
+        };
+
         data.motogpResults.forEach(result => {
             labels.push(result.circuit.substring(0, 3).toUpperCase()); // 3 letters code
             
             // Find points in sprint
-            const sResult = result.sprint.find(r => r.driver === csvName);
+            const sResult = findDriver(result.sprint, csvName);
             sprintPoints.push(sResult ? sResult.points : 0);
 
             // Find points in race
-            const rResult = result.race.find(r => r.driver === csvName);
+            const rResult = findDriver(result.race, csvName);
             racePoints.push(rResult ? rResult.points : 0);
         });
 
@@ -1830,30 +1923,34 @@ function RiderProfileView({ riderId, onBack, data }: { riderId: string; onBack: 
                         <UserIcon className="w-48 h-48 text-gray-700 mb-20" />
                     )}
                     
-                    {/* PIE DE FOTO (Reemplaza al título simple anterior y al bloque de texto inferior) */}
-                    <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/70 to-transparent z-20">
-                        <h1 className="text-4xl sm:text-5xl font-orbitron font-bold uppercase tracking-wide leading-none text-white drop-shadow-lg text-left">
+                    {/* DORSAL EN ESQUINA INFERIOR DERECHA DENTRO DE LA FOTO - MODIFICADO */}
+                    {riderNumber && (
+                        <div className="absolute bottom-2 right-2 z-10 select-none">
+                            <span className="text-5xl sm:text-7xl font-black font-orbitron text-gray-600 opacity-60">
+                                #{riderNumber}
+                            </span>
+                        </div>
+                    )}
+                    
+                    {/* PIE DE FOTO - MODIFICADO */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 z-20">
+                        {/* Eliminar bg-gradient específico aquí si ya hay uno global, o ajustarlo */}
+                        <h1 className="text-2xl sm:text-4xl font-orbitron font-bold uppercase tracking-wide leading-none text-white drop-shadow-lg text-left break-words">
                             <div>{rider.name}</div>
                             <div className="flex items-center gap-3 mt-1">
                                 {rider.country.flag && <img src={rider.country.flag} alt={rider.country.iso} className="h-6 sm:h-8 rounded shadow-sm" />}
                                 <span className="text-red-600">{rider.surname}</span>
                             </div>
                         </h1>
-                        <p className="text-gray-300 text-lg mt-2 font-medium text-left">{teamName}</p>
+                        <p className="text-gray-300 text-base sm:text-lg mt-2 font-medium text-left">{teamName}</p>
                    </div>
                 </div>
 
                 {/* Columna Derecha: Detalles */}
                 <div className="lg:col-span-2 flex flex-col gap-8">
                     
-                    {/* Header: Nombre y Equipo (Simplificado: Solo número) */}
-                    <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center border-b border-gray-800 pb-6 min-h-[80px]">
-                        {riderNumber && (
-                            <div className="text-6xl sm:text-7xl font-black text-[#1a1a1a] font-orbitron mt-4 sm:mt-0" style={{ WebkitTextStroke: '1px #333' }}>
-                                #{riderNumber}
-                            </div>
-                        )}
-                    </div>
+                    {/* Header: Eliminado el dorsal de aquí, se mantiene como separador */}
+                    <div className="border-b border-gray-800 pb-6 min-h-[20px]"></div>
 
                     {/* Estadísticas Clave */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1881,11 +1978,13 @@ function RiderProfileView({ riderId, onBack, data }: { riderId: string; onBack: 
                         </div>
                     )}
 
-                    {/* Gráfica Temporada Actual */}
-                    <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-6">
-                        <h3 className="font-orbitron text-lg uppercase tracking-widest mb-4 text-white">Temporada Actual (Puntos)</h3>
-                        <CurrentSeasonChart labels={chartData.labels} sprintPoints={chartData.sprint} racePoints={chartData.race} />
-                    </div>
+                    {/* Gráfica Temporada Actual - Solo para MotoGP y Maximizada */}
+                    {isMotoGP && (
+                        <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg overflow-hidden">
+                            <h3 className="font-orbitron text-lg uppercase tracking-widest p-4 pb-2 text-white">Temporada Actual (Puntos)</h3>
+                            <CurrentSeasonChart labels={chartData.labels} sprintPoints={chartData.sprint} racePoints={chartData.race} />
+                        </div>
+                    )}
 
                     {/* Grid Inferior: Datos y Máquina */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -3235,7 +3334,7 @@ function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
     );
 }
 
-export default function App() {
+export function App() {
     const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
@@ -3376,18 +3475,25 @@ export default function App() {
                                     className="absolute left-0 mt-2 w-56 origin-top-left rounded-md shadow-lg card-bg ring-1 ring-black ring-opacity-5 z-50"
                                 >
                                     <div className="py-1" role="menu" aria-orientation="vertical">
-                                        {TABS.map(({name, tab}) => (
-                                            <button
-                                                key={tab}
-                                                onClick={() => handleSetTab(tab)}
-                                                className={`${
-                                                    activeTab === tab ? 'motogp-red bg-gray-900/50' : 'text-gray-300'
-                                                } block w-full text-left px-4 py-4 text-lg hover:bg-gray-700/80 transition-colors`}
-                                                role="menuitem"
-                                            >
-                                                {name}
-                                            </button>
-                                        ))}
+                                        {TABS.map(({name, tab}) => {
+                                            const isSpecial = tab === 'motogp_data' || tab === 'noticias';
+                                            return (
+                                                <button
+                                                    key={tab}
+                                                    onClick={() => handleSetTab(tab)}
+                                                    className={`${
+                                                        activeTab === tab 
+                                                        ? 'motogp-red bg-gray-900/50 font-bold' 
+                                                        : isSpecial 
+                                                            ? 'text-gray-200 bg-red-900/20 hover:bg-red-900/40' 
+                                                            : 'text-gray-300 hover:bg-gray-700/80'
+                                                    } block w-full text-left px-4 py-4 text-lg transition-colors font-sans`}
+                                                    role="menuitem"
+                                                >
+                                                    {name}
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             </>
