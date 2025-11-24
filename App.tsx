@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { chatWithData } from './services/geminiService';
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon } from './components/icons';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon, SearchIcon } from './components/icons';
 
 declare var html2canvas: any;
 
@@ -1644,7 +1644,7 @@ const CurrentSeasonChart = ({ labels, sprintPoints, racePoints }: { labels: stri
                     <div className="w-3 h-3 bg-[#E50914] rounded-full"></div> <span className="text-gray-300">RACE</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 border-2 border-[#00A651] bg-[#1e1e1e] rounded-full"></div> <span className="text-gray-300">SCR</span>
+                    <div className="w-3 h-3 border-2 border-[#00A651] bg-[#1e1e1e] rounded-full"></div> <span className="text-gray-300">SPR</span>
                 </div>
             </div>
 
@@ -2071,6 +2071,8 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
     const [riders, setRiders] = useState<ApiRider[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string>('MotoGP');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
 
     useEffect(() => {
         const loadRiders = async () => {
@@ -2088,10 +2090,23 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
     }, []);
 
     const filteredRiders = useMemo(() => {
-        // 1. Filtrar por categoría de manera segura (usando optional chaining)
-        let filtered = riders.filter(r => 
-            r.current_career_step?.category?.name?.toLowerCase().includes(selectedCategory.toLowerCase()) ?? false
-        );
+        // 1. Filtrar
+        let filtered = riders.filter(r => {
+            const career = r.current_career_step;
+            
+            // Comprobar categoría de manera segura
+            const matchesCategory = career?.category?.name?.toLowerCase().includes(selectedCategory.toLowerCase()) ?? false;
+            
+            // Comprobar búsqueda (nombre, apellido, dorsal O equipo)
+            const normalizedQuery = searchQuery.toLowerCase().trim();
+            const matchesSearch = !normalizedQuery || 
+                                  r.name.toLowerCase().includes(normalizedQuery) || 
+                                  r.surname.toLowerCase().includes(normalizedQuery) || 
+                                  (career?.number?.toString().includes(normalizedQuery) ?? false) ||
+                                  (career?.team?.name?.toLowerCase().includes(normalizedQuery) ?? false);
+
+            return matchesCategory && matchesSearch;
+        });
 
         // 2. Ordenar: Oficiales primero, luego por número de dorsal
         filtered.sort((a, b) => {
@@ -2112,13 +2127,51 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
         });
 
         return filtered;
-    }, [riders, selectedCategory]);
+    }, [riders, selectedCategory, searchQuery]);
 
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
-             <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center mb-6">
-                &larr; Volver al menú
-            </button>
+             <div className="flex justify-between items-center mb-6 gap-4">
+                <button onClick={onBack} className={`bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center ${isSearchOpen ? 'hidden sm:flex' : ''}`}>
+                    &larr; Volver al menú
+                </button>
+
+                {/* Barra de Búsqueda Expandible */}
+                <div className={`flex justify-end transition-all duration-300 ${isSearchOpen ? 'w-full' : ''}`}>
+                    {!isSearchOpen ? (
+                        <button
+                            onClick={() => setIsSearchOpen(true)}
+                            className="p-3 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-all shadow-md"
+                            aria-label="Buscar"
+                        >
+                            <SearchIcon className="h-6 w-6" />
+                        </button>
+                    ) : (
+                        <div className="relative w-full max-w-md animate-fade-in">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <SearchIcon className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <input
+                                autoFocus
+                                type="text"
+                                className="block w-full pl-10 pr-10 py-2 border border-gray-600 rounded-lg leading-5 bg-gray-800 text-gray-300 placeholder-gray-400 focus:outline-none focus:bg-gray-900 focus:border-red-500 focus:ring-1 focus:ring-red-500 sm:text-sm transition-colors"
+                                placeholder="Nombre, dorsal o equipo..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            <button
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setIsSearchOpen(false);
+                                }}
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white focus:outline-none"
+                            >
+                                <XIcon className="h-5 w-5" />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             <div className="flex justify-center gap-4 mb-8">
                 {['MotoGP', 'Moto2', 'Moto3'].map(cat => (
@@ -2143,68 +2196,74 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {filteredRiders.map(rider => {
-                        // Check if career step exists to avoid crashes
-                        const career = rider.current_career_step;
-                        if (!career) return null;
+                    {filteredRiders.length > 0 ? (
+                        filteredRiders.map(rider => {
+                            // Check if career step exists to avoid crashes
+                            const career = rider.current_career_step;
+                            if (!career) return null;
 
-                        const isSubstitute = career.type !== 'Official';
-                        const teamColor = career.team?.color || '#374151';
-                        
-                        return (
-                            <div 
-                                key={rider.id}
-                                onClick={() => onRiderSelect(rider.id)}
-                                className="relative bg-gray-800/40 border border-gray-700 rounded-xl overflow-hidden hover:border-red-500 transition-all duration-300 cursor-pointer group hover:-translate-y-1"
-                            >
-                                {isSubstitute && (
-                                    <div className="absolute top-2 right-2 z-10 bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded">
-                                        {career.type}
-                                    </div>
-                                )}
-                                
+                            const isSubstitute = career.type !== 'Official';
+                            const teamColor = career.team?.color || '#374151';
+                            
+                            return (
                                 <div 
-                                    className="h-44 w-full relative overflow-hidden"
-                                    style={{ background: `linear-gradient(to top right, #000000, ${teamColor})` }}
+                                    key={rider.id}
+                                    onClick={() => onRiderSelect(rider.id)}
+                                    className="relative bg-gray-800/40 border border-gray-700 rounded-xl overflow-hidden hover:border-red-500 transition-all duration-300 cursor-pointer group hover:-translate-y-1"
                                 >
-                                     {/* Imagen del piloto */}
-                                     {career.pictures?.profile?.main ? (
-                                         <img 
-                                            src={career.pictures.profile.main} 
-                                            alt={rider.name} 
-                                            className="w-full h-full object-cover object-top transform group-hover:scale-105 transition-transform duration-300"
-                                        />
-                                     ) : (
-                                         <div className="w-full h-full flex items-center justify-center">
-                                            <UserIcon className="w-24 h-24 text-gray-600" />
-                                         </div>
-                                     )}
-                                     
-                                     {/* Dorsal superpuesto */}
-                                     {career.number && (
-                                         <span className="absolute bottom-2 left-2 text-5xl font-bold font-orbitron text-white/10 group-hover:text-white/20 transition-colors">
-                                             {career.number}
-                                         </span>
-                                     )}
-                                </div>
-
-                                <div className="p-2">
-                                    <div className="flex justify-between items-center">
-                                        <div className="min-w-0 pr-2">
-                                            <h3 className="text-base font-bold text-white leading-tight truncate">{rider.name} {rider.surname}</h3>
-                                            <p className="text-gray-400 text-xs truncate">{career.team?.name}</p>
+                                    {isSubstitute && (
+                                        <div className="absolute top-2 right-2 z-10 bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded">
+                                            {career.type}
                                         </div>
-                                        <div className="flex flex-col items-center flex-shrink-0">
-                                            {rider.country.flag && (
-                                                <img src={rider.country.flag} alt={rider.country.iso} className="w-5 rounded shadow-sm" />
-                                            )}
-                                            <span className="text-[9px] text-gray-500">{rider.country.iso}</span>
+                                    )}
+                                    
+                                    <div 
+                                        className="h-44 w-full relative overflow-hidden"
+                                        style={{ background: `linear-gradient(to top right, #000000, ${teamColor})` }}
+                                    >
+                                         {/* Imagen del piloto */}
+                                         {career.pictures?.profile?.main ? (
+                                             <img 
+                                                src={career.pictures.profile.main} 
+                                                alt={rider.name} 
+                                                className="w-full h-full object-cover object-top transform group-hover:scale-105 transition-transform duration-300"
+                                            />
+                                         ) : (
+                                             <div className="w-full h-full flex items-center justify-center">
+                                                <UserIcon className="w-24 h-24 text-gray-600" />
+                                             </div>
+                                         )}
+                                         
+                                         {/* Dorsal superpuesto */}
+                                         {career.number && (
+                                             <span className="absolute bottom-2 left-2 text-5xl font-bold font-orbitron text-white/10 group-hover:text-white/20 transition-colors">
+                                                 {career.number}
+                                             </span>
+                                         )}
+                                    </div>
+
+                                    <div className="p-2">
+                                        <div className="flex justify-between items-center">
+                                            <div className="min-w-0 pr-2">
+                                                <h3 className="text-base font-bold text-white leading-tight truncate">{rider.name} {rider.surname}</h3>
+                                                <p className="text-gray-400 text-xs truncate">{career.team?.name}</p>
+                                            </div>
+                                            <div className="flex flex-col items-center flex-shrink-0">
+                                                {rider.country.flag && (
+                                                    <img src={rider.country.flag} alt={rider.country.iso} className="w-5 rounded shadow-sm" />
+                                                )}
+                                                <span className="text-[9px] text-gray-500">{rider.country.iso}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    ) : (
+                        <div className="col-span-full text-center py-8 text-gray-400">
+                            No se encontraron pilotos que coincidan con la búsqueda.
+                        </div>
+                    )}
                 </div>
             )}
         </div>
