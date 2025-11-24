@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
-import type { MotoGpData, ChatMessage } from '../types';
+import type { MotoGpData, ChatMessage, ApiBroadcastEvent } from '../types';
 
-export const chatWithData = async (data: MotoGpData, rawCsv: string, history: ChatMessage[], query: string): Promise<string> => {
+export const chatWithData = async (data: MotoGpData, rawCsv: string, history: ChatMessage[], query: string, calendar: ApiBroadcastEvent[] | null = null): Promise<string> => {
     // La inicialización y la comprobación de la clave se mueven aquí para evitar que se ejecuten al cargar el módulo.
     if (!process.env.API_KEY) {
       throw new Error("La clave API de Gemini no está configurada. La función de chat está deshabilitada.");
@@ -12,6 +12,24 @@ export const chatWithData = async (data: MotoGpData, rawCsv: string, history: Ch
     // y los datos brutos para preguntas sobre partes que no hemos procesado (como los resultados oficiales de MotoGP).
 
     const formattedHistory = history.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+
+    let calendarContext = "";
+    if (calendar && calendar.length > 0) {
+        const simplifiedCalendar = calendar.map(e => ({
+            name: e.name,
+            date_start: e.date_start,
+            date_end: e.date_end,
+            circuit: e.circuit?.name || "Unknown",
+            country: e.country,
+            status: e.status
+        }));
+        calendarContext = `
+Aquí está el calendario oficial de eventos de MotoGP (2025):
+--- CALENDARIO ---
+${JSON.stringify(simplifiedCalendar, null, 2)}
+--- FIN CALENDARIO ---
+`;
+    }
 
     const prompt = `Eres un asistente experto en MotoGP y analista de datos para una liga de fans. Estás analizando los datos de su campeonato.
 
@@ -28,6 +46,7 @@ Y aquí están los datos completos en formato CSV original, por si necesitas con
 --- DATOS CSV COMPLETOS ---
 ${rawCsv}
 --- FIN DE DATOS CSV ---
+${calendarContext}
 
 La conversación anterior fue:
 --- HISTORIAL ---
@@ -36,12 +55,12 @@ ${formattedHistory}
 
 La nueva pregunta del usuario es: "${query}"
 
-Responde a la pregunta del usuario basándote en los datos proporcionados. Utiliza los datos estructurados siempre que sea posible para preguntas sobre clasificaciones, carreras y votos de jugadores. Consulta los datos CSV si te preguntan por los resultados oficiales de las carreras de MotoGP (SPR y RACE) que se encuentran en la parte inferior del archivo. Sé conciso, servicial y utiliza la jerga de MotoGP si es apropiado. La respuesta debe estar en español.`;
+Responde a la pregunta del usuario basándote en los datos proporcionados. Utiliza los datos estructurados siempre que sea posible para preguntas sobre clasificaciones, carreras y votos de jugadores. Consulta los datos CSV si te preguntan por los resultados oficiales de las carreras de MotoGP (SPR y RACE) que se encuentran en la parte inferior del archivo. Si preguntan por el calendario o próximas carreras, usa la información del CALENDARIO proporcionada. Sé conciso, servicial y utiliza la jerga de MotoGP si es apropiado. La respuesta debe estar en español.`;
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
     });
 
-    return response.text;
+    return response.text || '';
 };

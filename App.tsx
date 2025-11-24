@@ -634,7 +634,7 @@ function ChatBubbleButton({ onClick }: { onClick: () => void }) {
     );
 }
 
-function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: MotoGpData; rawCsv: string }) {
+function ChatWindow({ onClose, data, rawCsv, calendar }: { onClose: () => void; data: MotoGpData; rawCsv: string; calendar: ApiBroadcastEvent[] | null }) {
     const [messages, setMessages] = useState<ChatMessage[]>([
         { role: 'model', content: '¡Hola! Soy tu asistente de PorraGP. Pregúntame sobre la clasificación, estadísticas o resultados.' }
     ]);
@@ -659,7 +659,7 @@ function ChatWindow({ onClose, data, rawCsv }: { onClose: () => void; data: Moto
         setIsSending(true);
 
         try {
-            const replyText = await chatWithData(data, rawCsv, [...messages, userMessage], userMessage.content);
+            const replyText = await chatWithData(data, rawCsv, [...messages, userMessage], userMessage.content, calendar);
             setMessages(prev => [...prev, { role: 'model', content: replyText }]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'model', content: "Lo siento, hubo un error al procesar tu consulta. Verifica la configuración de la API Key." }]);
@@ -2155,7 +2155,7 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
                                 autoFocus
                                 type="text"
                                 className="block w-full pl-10 pr-10 py-2 border border-gray-600 rounded-lg leading-5 bg-gray-800 text-gray-300 placeholder-gray-400 focus:outline-none focus:bg-gray-900 focus:border-red-500 focus:ring-1 focus:ring-red-500 sm:text-sm transition-colors"
-                                placeholder="Nombre, dorsal o equipo..."
+                                placeholder="Nombre, apellido, dorsal o equipo..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -3398,6 +3398,8 @@ export function App() {
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [calendarData, setCalendarData] = useState<ApiBroadcastEvent[] | null>(null);
+
     // Inicializar activeTab desde el hash de la URL
     const getTabFromHash = (): Tab => {
         const hash = window.location.hash.replace('#', '');
@@ -3423,6 +3425,15 @@ export function App() {
             setRawCsv(text);
             const data = parseCsvData(text);
             setMotoGpData(data);
+
+            // Fetch calendar in parallel
+            try {
+                const calendar = await fetchBroadcastEvents(2025);
+                setCalendarData(calendar);
+            } catch (calError) {
+                console.warn("Could not fetch calendar for chat context", calError);
+            }
+
         } catch (err: any) {
             setError(err.message || 'Ocurrió un error al procesar los datos.');
         } finally {
@@ -3600,6 +3611,7 @@ export function App() {
                     onClose={() => setIsChatOpen(false)}
                     data={motoGpData}
                     rawCsv={rawCsv}
+                    calendar={calendarData}
                 />
             )}
         </div>
