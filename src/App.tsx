@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
-import { requestForToken, VAPID_KEY } from './services/firebase';
+import { requestForToken, deleteUserToken, VAPID_KEY } from './services/firebase';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon, SearchIcon, BellIcon } from './components/icons';
 
@@ -240,40 +240,62 @@ function NotificationButton() {
     const [status, setStatus] = useState<'default' | 'loading' | 'subscribed' | 'error'>('default');
 
     useEffect(() => {
-        // Check local storage or permission to set initial status
-        if (Notification.permission === 'granted') {
+        // Comprobar preferencia guardada y permiso real
+        const storedPref = localStorage.getItem('porragp_notifications_enabled');
+        if (Notification.permission === 'granted' && storedPref === 'true') {
             setStatus('subscribed');
         }
     }, []);
 
-    const handleSubscribe = async () => {
+    const toggleNotifications = async () => {
         if (VAPID_KEY.includes("TU_CLAVE")) {
             alert("⚠️ Error de configuración: Falta la clave VAPID en el código.");
             return;
         }
 
-        setStatus('loading');
-        try {
-            // Ahora requestForToken lanza errores si algo falla
-            const token = await requestForToken();
-            console.log("Token generado:", token);
-            
-            // Enviamos el token a Google Sheets
-            await sendTokenToGoogleSheets(token); 
-            
-            setStatus('subscribed');
-            alert("¡Notificaciones activadas correctamente!");
-        } catch (error: any) {
-            console.error("Error en suscripción:", error);
-            setStatus('error');
-            // Mostrar el mensaje exacto del error para facilitar la depuración en Android
-            alert(`No se pudieron activar las notificaciones:\n\n${error.message}`);
+        if (status === 'subscribed') {
+            // DESACTIVAR
+            const confirmUnsub = window.confirm("¿Quieres dejar de recibir notificaciones de PorraGP?");
+            if (!confirmUnsub) return;
+
+            setStatus('loading');
+            try {
+                await deleteUserToken();
+                localStorage.setItem('porragp_notifications_enabled', 'false');
+                setStatus('default');
+                alert("Notificaciones desactivadas.");
+            } catch (e) {
+                console.error("Error al desactivar:", e);
+                setStatus('error');
+            }
+        } else {
+            // ACTIVAR (O REACTIVAR)
+            setStatus('loading');
+            try {
+                const token = await requestForToken();
+                console.log("Token generado:", token);
+                
+                await sendTokenToGoogleSheets(token);
+                
+                localStorage.setItem('porragp_notifications_enabled', 'true');
+                setStatus('subscribed');
+                alert("¡Notificaciones activadas correctamente!");
+            } catch (error: any) {
+                console.error("Error en suscripción:", error);
+                setStatus('error');
+                alert(`No se pudieron activar las notificaciones:\n\n${error.message}`);
+            }
         }
     };
 
     if (status === 'subscribed') {
         return (
-            <button className="bg-green-600/20 text-green-500 font-bold py-2 px-3 rounded-lg flex items-center cursor-default border border-green-500/30">
+            <button 
+                onClick={toggleNotifications}
+                className="bg-green-600/20 text-green-500 font-bold py-2 px-3 rounded-lg flex items-center cursor-pointer border border-green-500/30 hover:bg-green-600/30 transition-colors"
+                aria-label="Desactivar notificaciones"
+                title="Notificaciones activadas. Pulsa para desactivar."
+            >
                 <BellIcon className="w-5 h-5" />
             </button>
         );
@@ -281,10 +303,11 @@ function NotificationButton() {
 
     return (
         <button
-            onClick={handleSubscribe}
+            onClick={toggleNotifications}
             disabled={status === 'loading'}
             className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center disabled:opacity-50"
             aria-label="Activar notificaciones"
+            title="Activar notificaciones"
         >
             <BellIcon className={`w-5 h-5 ${status === 'loading' ? 'animate-pulse text-yellow-400' : ''}`} />
         </button>

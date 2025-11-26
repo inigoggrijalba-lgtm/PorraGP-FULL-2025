@@ -63,3 +63,14 @@ export const requestForToken = async () => {
     throw new Error(err.message || "Error desconocido al conectar con el servidor de notificaciones.");
   }
 };
+
+export const deleteUserToken = async () => {
+  try {
+    await messaging.deleteToken();
+    console.log('Token eliminado de Firebase.');
+    return true;
+  } catch (error) {
+    console.error('Error al eliminar el token:', error);
+    return false;
+  }
+};
