@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
 import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
-import { requestForToken, deleteUserToken, VAPID_KEY } from './services/firebase';
 import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent } from './types';
-import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon, SearchIcon, BellIcon } from './components/icons';
+import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon, SearchIcon } from './components/icons';
 
 declare var html2canvas: any;
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQAqF8HCmEs0iGvEO0jItWZl_PfIF2Igy8PoNhEnQjB-C92vCyWvSMRB00FpsNseEA8T-7Ip4GfDPf3/pub?gid=0&single=true&output=csv';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_4bLXjRopq6-T9W9F5mLB16df8vFiWHOORlBb5lq6-7r1C5pjIGN2clzQ4MrqTviJ/exec';
 
 const RIDER_COLORS: Record<string, string> = {
     // Rojo Intenso
@@ -213,108 +211,6 @@ function RefreshButton({ onClick, isLoading }: { onClick: () => void; isLoading:
         >
             <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''} mr-2`} />
             <span className="hidden sm:inline">{isLoading ? '...' : 'Actualizar'}</span>
-        </button>
-    );
-}
-
-// Helper function to send token to Google Sheets
-const sendTokenToGoogleSheets = async (token: string) => {
-    try {
-        // Use no-cors mode because Google Scripts usually redirect, which fetch doesn't like in CORS mode
-        // We are sending simple JSON data.
-        await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors', // Important for GAS Web App
-            headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-            },
-            body: JSON.stringify({ token: token })
-        });
-        console.log("Token enviado a Google Sheets");
-    } catch (error) {
-        console.error("Error enviando token a Sheets:", error);
-    }
-};
-
-function NotificationButton() {
-    const [status, setStatus] = useState<'default' | 'loading' | 'subscribed' | 'error'>('default');
-
-    useEffect(() => {
-        // Comprobar preferencia guardada y permiso real
-        const storedPref = localStorage.getItem('porragp_notifications_enabled');
-        if (Notification.permission === 'granted' && storedPref === 'true') {
-            setStatus('subscribed');
-        }
-    }, []);
-
-    const toggleNotifications = async () => {
-        if (VAPID_KEY.includes("TU_CLAVE")) {
-            alert("⚠️ Error de configuración: Falta la clave VAPID en el código.");
-            return;
-        }
-
-        if (status === 'subscribed') {
-            // --- LÓGICA DE DESUSCRIPCIÓN (Verde -> Gris) ---
-            const confirmUnsub = window.confirm("¿Quieres dejar de recibir notificaciones de PorraGP?");
-            if (!confirmUnsub) return;
-
-            setStatus('loading');
-            try {
-                await deleteUserToken();
-                localStorage.setItem('porragp_notifications_enabled', 'false');
-                setStatus('default'); // Vuelve a estado "disponible" (Gris)
-                alert("Notificaciones desactivadas.");
-            } catch (e) {
-                console.error("Error al desactivar:", e);
-                setStatus('default'); // En caso de error, permitimos reintentar desde estado default
-                alert("Hubo un error al desactivar. Inténtalo de nuevo.");
-            }
-        } else {
-            // --- LÓGICA DE SUSCRIPCIÓN (Gris -> Verde) ---
-            setStatus('loading');
-            try {
-                const token = await requestForToken();
-                console.log("Token generado:", token);
-                
-                // Enviamos al Excel
-                await sendTokenToGoogleSheets(token);
-                
-                // Guardamos preferencia
-                localStorage.setItem('porragp_notifications_enabled', 'true');
-                setStatus('subscribed');
-                alert("¡Notificaciones activadas correctamente!");
-            } catch (error: any) {
-                console.error("Error en suscripción:", error);
-                // IMPORTANTE: Si falla, volvemos a 'default' (gris) para que el usuario pueda volver a pulsar.
-                // No lo dejamos en 'loading' ni 'error' bloqueado.
-                setStatus('default'); 
-                alert(`No se pudieron activar las notificaciones:\n\n${error.message}`);
-            }
-        }
-    };
-
-    if (status === 'subscribed') {
-        return (
-            <button 
-                onClick={toggleNotifications}
-                className="bg-green-600/20 text-green-500 font-bold py-2 px-3 rounded-lg flex items-center cursor-pointer border border-green-500/30 hover:bg-green-600/30 transition-colors"
-                aria-label="Desactivar notificaciones"
-                title="Notificaciones activadas. Pulsa para desactivar."
-            >
-                <BellIcon className="w-5 h-5" />
-            </button>
-        );
-    }
-
-    return (
-        <button
-            onClick={toggleNotifications}
-            disabled={status === 'loading'}
-            className={`bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center disabled:opacity-50 ${status === 'error' ? 'border border-red-500' : ''}`}
-            aria-label="Activar notificaciones"
-            title={status === 'error' ? 'Error al activar. Pulsa para reintentar.' : 'Activar notificaciones'}
-        >
-            <BellIcon className={`w-5 h-5 ${status === 'loading' ? 'animate-pulse text-yellow-400' : ''}`} />
         </button>
     );
 }
@@ -3631,10 +3527,7 @@ export function App() {
                     <span className="transition-colors duration-300 group-hover:motogp-red">Porra</span>
                     <span className="motogp-red transition-colors duration-300 group-hover:text-white">GP</span>
                 </button>
-                <div className="flex items-center gap-2">
-                    <NotificationButton />
-                    <RefreshButton onClick={fetchData} isLoading={isLoading} />
-                </div>
+                <RefreshButton onClick={fetchData} isLoading={isLoading} />
             </header>
 
             <main className={`w-full flex-grow flex flex-col ${activeTab !== 'livetiming' ? 'max-w-7xl mx-auto' : ''}`}>
