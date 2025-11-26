@@ -22,16 +22,31 @@ export const messaging = firebase.messaging();
 export const VAPID_KEY = "BJd4bu5m6_4jg8vcS92Bzhdi1zskijoYwRuPzNVtQxNz90HDDeQB0-yaG-E1qdBqyLLe9eZEGsf3Z_huD9CqxlQ";
 
 export const requestForToken = async () => {
+  // 1. Comprobación inicial de soporte
+  if (!('Notification' in window)) {
+    throw new Error("Este navegador no soporta notificaciones web.");
+  }
+
+  // 2. Solicitar permiso INMEDIATAMENTE (Crucial para móviles)
+  // Debe ser lo primero que ocurra tras el clic del usuario.
+  const permission = await Notification.requestPermission();
+  
+  if (permission === 'denied') {
+    throw new Error("Permiso de notificaciones denegado por el usuario.");
+  }
+  if (permission === 'default') {
+    throw new Error("El permiso de notificaciones fue cerrado sin aceptar.");
+  }
+
   try {
-    // Necesitamos obtener el registro del Service Worker activo para pasárselo a Firebase
-    // ya que estamos usando nuestro propio sw.js y no el firebase-messaging-sw.js por defecto
+    // 3. Solo si tenemos permiso, buscamos el Service Worker
     const registration = await navigator.serviceWorker.ready;
     
     if (!registration) {
-        console.error("Service Worker registration not found.");
-        return null;
+        throw new Error("No se encontró un Service Worker activo. Intenta recargar la página.");
     }
 
+    // 4. Obtener el token a través de Firebase
     const currentToken = await messaging.getToken({ 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -40,11 +55,11 @@ export const requestForToken = async () => {
     if (currentToken) {
       return currentToken;
     } else {
-      console.log('No registration token available. Request permission to generate one.');
-      return null;
+      throw new Error("No se pudo generar el token de identificación.");
     }
-  } catch (err) {
-    console.log('An error occurred while retrieving token. ', err);
-    return null;
+  } catch (err: any) {
+    console.error('Error detallado al obtener token:', err);
+    // Propagar el mensaje de error original si existe
+    throw new Error(err.message || "Error desconocido al conectar con el servidor de notificaciones.");
   }
 };

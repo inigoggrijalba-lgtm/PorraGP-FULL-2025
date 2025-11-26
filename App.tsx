@@ -254,20 +254,20 @@ function NotificationButton() {
 
         setStatus('loading');
         try {
+            // Ahora requestForToken lanza errores si algo falla
             const token = await requestForToken();
-            if (token) {
-                console.log("Token generado:", token);
-                // Enviamos el token a Google Sheets
-                await sendTokenToGoogleSheets(token); 
-                setStatus('subscribed');
-                alert("¡Notificaciones activadas!");
-            } else {
-                setStatus('error');
-                alert("No se pudo obtener el permiso para notificaciones.");
-            }
-        } catch (error) {
+            console.log("Token generado:", token);
+            
+            // Enviamos el token a Google Sheets
+            await sendTokenToGoogleSheets(token); 
+            
+            setStatus('subscribed');
+            alert("¡Notificaciones activadas correctamente!");
+        } catch (error: any) {
             console.error("Error en suscripción:", error);
             setStatus('error');
+            // Mostrar el mensaje exacto del error para facilitar la depuración en Android
+            alert(`No se pudieron activar las notificaciones:\n\n${error.message}`);
         }
     };
 
