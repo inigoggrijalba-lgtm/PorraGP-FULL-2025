@@ -254,7 +254,7 @@ function NotificationButton() {
         }
 
         if (status === 'subscribed') {
-            // DESACTIVAR
+            // --- LÓGICA DE DESUSCRIPCIÓN (Verde -> Gris) ---
             const confirmUnsub = window.confirm("¿Quieres dejar de recibir notificaciones de PorraGP?");
             if (!confirmUnsub) return;
 
@@ -262,27 +262,32 @@ function NotificationButton() {
             try {
                 await deleteUserToken();
                 localStorage.setItem('porragp_notifications_enabled', 'false');
-                setStatus('default');
+                setStatus('default'); // Vuelve a estado "disponible" (Gris)
                 alert("Notificaciones desactivadas.");
             } catch (e) {
                 console.error("Error al desactivar:", e);
-                setStatus('error');
+                setStatus('default'); // En caso de error, permitimos reintentar desde estado default
+                alert("Hubo un error al desactivar. Inténtalo de nuevo.");
             }
         } else {
-            // ACTIVAR (O REACTIVAR)
+            // --- LÓGICA DE SUSCRIPCIÓN (Gris -> Verde) ---
             setStatus('loading');
             try {
                 const token = await requestForToken();
                 console.log("Token generado:", token);
                 
+                // Enviamos al Excel
                 await sendTokenToGoogleSheets(token);
                 
+                // Guardamos preferencia
                 localStorage.setItem('porragp_notifications_enabled', 'true');
                 setStatus('subscribed');
                 alert("¡Notificaciones activadas correctamente!");
             } catch (error: any) {
                 console.error("Error en suscripción:", error);
-                setStatus('error');
+                // IMPORTANTE: Si falla, volvemos a 'default' (gris) para que el usuario pueda volver a pulsar.
+                // No lo dejamos en 'loading' ni 'error' bloqueado.
+                setStatus('default'); 
                 alert(`No se pudieron activar las notificaciones:\n\n${error.message}`);
             }
         }
@@ -305,9 +310,9 @@ function NotificationButton() {
         <button
             onClick={toggleNotifications}
             disabled={status === 'loading'}
-            className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center disabled:opacity-50"
+            className={`bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center disabled:opacity-50 ${status === 'error' ? 'border border-red-500' : ''}`}
             aria-label="Activar notificaciones"
-            title="Activar notificaciones"
+            title={status === 'error' ? 'Error al activar. Pulsa para reintentar.' : 'Activar notificaciones'}
         >
             <BellIcon className={`w-5 h-5 ${status === 'loading' ? 'animate-pulse text-yellow-400' : ''}`} />
         </button>
