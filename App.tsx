@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { chatWithData } from './services/geminiService';
-import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents } from './services/motogpApiService';
-import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent } from './types';
+import { fetchSeasons, fetchRidersBySeason, fetchRiderDetails, fetchLiveTiming, fetchRiderStats, fetchRiderSeasonStats, fetchResultCategories, fetchResultEvents, fetchResultSessions, fetchSessionClassification, fetchAllRiders, fetchBroadcastEvents, fetchEventGrid } from './services/motogpApiService';
+import type { MotoGpData, Race, PlayerScore, PlayerVote, DriverVoteCount, ChatMessage, RaceResult, CircuitResult, Article, ApiSeason, ApiRider, LiveTimingHead, RiderStats, RiderSeasonStat, ApiCategoryResult, ApiEventResult, ApiSessionResult, ApiClassificationItem, ApiBroadcastEvent, ApiGridItem, MotoGpDataView } from './types';
 import { TrophyIcon, TableIcon, SparklesIcon, SendIcon, RefreshIcon, FlagIcon, UserIcon, PencilSquareIcon, MenuIcon, XIcon, NewspaperIcon, AppleIcon, AndroidIcon, IosShareIcon, AddToScreenIcon, AppleAppStoreBadge, GooglePlayBadge, CameraIcon, ShareIcon, DownloadIcon, FullscreenIcon, FullscreenExitIcon, SearchIcon } from './components/icons';
 
 declare var html2canvas: any;
@@ -2376,8 +2376,6 @@ function MotoGpRidersView({ onRiderSelect, onBack }: { onRiderSelect: (riderId: 
 
 // --- MOTO GP DATA COMPONENTS ---
 
-type MotoGpDataView = 'menu' | 'results' | 'riders' | 'profile' | 'circuits' | 'circuit_detail';
-
 function MotoGpDataMenu({ onSelectView }: { onSelectView: (view: MotoGpDataView) => void }) {
     return (
         <div className="animate-fade-in">
@@ -2435,6 +2433,8 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
     const [events, setEvents] = useState<ApiEventResult[]>([]);
     const [sessions, setSessions] = useState<ApiSessionResult[]>([]);
     const [classification, setClassification] = useState<ApiClassificationItem[]>([]);
+    const [gridData, setGridData] = useState<ApiGridItem[]>([]);
+    const [allRiders, setAllRiders] = useState<ApiRider[]>([]);
 
     const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
@@ -2446,6 +2446,38 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
     const [loadingEvents, setLoadingEvents] = useState(false);
     const [loadingSessions, setLoadingSessions] = useState(false);
     const [loadingClassification, setLoadingClassification] = useState(false);
+
+    // Screenshot state
+    const [isCapturingGrid, setIsCapturingGrid] = useState(false);
+    const [gridScreenshot, setGridScreenshot] = useState<string | null>(null);
+    const gridRef = useRef<HTMLDivElement>(null);
+
+    // Load full rider list for grid details
+    useEffect(() => {
+        const loadRiders = async () => {
+            try {
+                const riders = await fetchAllRiders();
+                setAllRiders(riders);
+            } catch (e) {
+                console.error("Error loading riders for grid details", e);
+            }
+        }
+        loadRiders();
+    }, []);
+
+    const formatGridName = (name: string, surname: string) => {
+        const n = name.trim();
+        const s = surname.trim();
+        const sLower = s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        if (sLower === 'marquez') return n === 'Marc' ? 'M. Marquez' : 'A. Marquez';
+        if (sLower === 'espargaro') return n === 'Aleix' ? 'A. Espargaro' : 'P. Espargaro';
+        if (sLower === 'fernandez') {
+            if (n === 'Raul') return 'Fernandez'; 
+            return 'A. Fernandez';
+        }
+        return s;
+    };
 
     // 1. Cargar Temporadas
     useEffect(() => {
@@ -2524,9 +2556,37 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
             setLoadingSessions(true);
             setSessions([]);
             setClassification([]);
+            setGridData([]);
             setSelectedSessionId('');
             try {
-                const sessionData = await fetchResultSessions(selectedEventId, selectedCategoryId);
+                let sessionData = await fetchResultSessions(selectedEventId, selectedCategoryId);
+                
+                // INYECCIÓN DE BOTÓN GRID SI AÑO >= 2025
+                const currentSeason = seasons.find(s => s.id === selectedSeasonId);
+                if (currentSeason && currentSeason.year >= 2025) {
+                    const fakeGridSession: ApiSessionResult = {
+                        id: 'GRID',
+                        type: 'GRID',
+                        number: null,
+                        status: 'FINISHED',
+                        date: sessionData.find(s => s.type === 'RAC')?.date || new Date().toISOString()
+                    };
+
+                    // Insertar antes de SPR, o si no hay, antes de RAC
+                    const sprIndex = sessionData.findIndex(s => s.type === 'SPR');
+                    if (sprIndex !== -1) {
+                        sessionData.splice(sprIndex, 0, fakeGridSession);
+                    } else {
+                        const racIndex = sessionData.findIndex(s => s.type === 'RAC');
+                        if (racIndex !== -1) {
+                            sessionData.splice(racIndex, 0, fakeGridSession);
+                        } else {
+                            // Fallback, al final
+                            sessionData.push(fakeGridSession);
+                        }
+                    }
+                }
+
                 setSessions(sessionData);
 
                 // Auto-seleccionar carrera ('RAC') por defecto
@@ -2544,26 +2604,35 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
             }
         };
         loadSessions();
-    }, [selectedEventId, selectedCategoryId]);
+    }, [selectedEventId, selectedCategoryId, selectedSeasonId, seasons]);
 
-    // 4. Cargar Clasificación cuando cambia la Sesión
+    // 4. Cargar Clasificación o Grid cuando cambia la Sesión
     useEffect(() => {
         if (!selectedSessionId) return;
 
-        const loadClassification = async () => {
+        const loadData = async () => {
             setLoadingClassification(true);
             setClassification([]);
+            setGridData([]);
+            
             try {
-                const data = await fetchSessionClassification(selectedSessionId);
-                setClassification(data.classification);
+                if (selectedSessionId === 'GRID') {
+                    // Cargar Grid
+                    const grid = await fetchEventGrid(selectedEventId, selectedCategoryId);
+                    setGridData(grid);
+                } else {
+                    // Cargar Clasificación normal
+                    const data = await fetchSessionClassification(selectedSessionId);
+                    setClassification(data.classification);
+                }
             } catch (error) {
-                console.error("Error cargando clasificación:", error);
+                console.error("Error cargando datos de sesión:", error);
             } finally {
                 setLoadingClassification(false);
             }
         };
-        loadClassification();
-    }, [selectedSessionId]);
+        loadData();
+    }, [selectedSessionId, selectedEventId, selectedCategoryId]);
 
 
     const getSessionLabel = (session: ApiSessionResult) => {
@@ -2594,6 +2663,33 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
             return dateString;
         }
     };
+
+    const handleCaptureGridScreenshot = async () => {
+        if (!gridRef.current) return;
+        setIsCapturingGrid(true);
+        try {
+            const canvas = await html2canvas(gridRef.current, {
+                backgroundColor: '#1d1d1d', // ~ card-bg color
+                scale: 2,
+                useCORS: true, 
+            });
+            setGridScreenshot(canvas.toDataURL('image/png'));
+        } catch (error) {
+            console.error("Error capturing grid screenshot:", error);
+        } finally {
+            setIsCapturingGrid(false);
+        }
+    };
+
+    // Helper para dividir el grid en filas de 3
+    const gridRows = useMemo(() => {
+        if (!gridData || gridData.length === 0) return [];
+        const rows = [];
+        for (let i = 0; i < gridData.length; i += 3) {
+            rows.push(gridData.slice(i, i + 3));
+        }
+        return rows;
+    }, [gridData]);
 
     return (
         <div className="card-bg p-4 sm:p-6 rounded-xl shadow-lg animate-fade-in">
@@ -2693,7 +2789,7 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
             )}
 
              {/* CABECERA DE SESIÓN (FECHA Y CONDICIONES) */}
-             {selectedSession && (
+             {selectedSession && selectedSessionId !== 'GRID' && (
                 <div className="mb-4 bg-gray-800/50 p-3 rounded-lg border border-gray-700 text-center">
                     <p className="text-white font-orbitron text-lg font-bold mb-1">
                         {formatDate(selectedSession.date)}
@@ -2709,119 +2805,238 @@ function MotoGpResultsView({ onBack }: { onBack: () => void }) {
                     )}
                 </div>
             )}
+            
+            {/* CONTENIDO DE TABLA (CLASIFICACIÓN O GRID) */}
+            {loadingClassification ? (
+                <div className="text-center py-12">
+                        <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
+                        <p className="mt-4 text-gray-400">Cargando resultados...</p>
+                </div>
+            ) : (
+                selectedSessionId === 'GRID' ? (
+                    // --- VISTA DE PARRILLA GRÁFICA ---
+                    gridData.length > 0 ? (
+                        <>
+                            <div ref={gridRef} className="p-4 bg-transparent">
+                                <div className="mb-6 text-center border-b border-gray-700 pb-4">
+                                    <h2 className="text-white font-orbitron text-2xl font-bold mb-1 uppercase">Parrilla de Salida</h2>
+                                    <p className="text-gray-400 text-xs uppercase tracking-widest">
+                                        {events.find(e => e.id === selectedEventId)?.name || 'GP'} - {categories.find(c => c.id === selectedCategoryId)?.name || 'Categoria'}
+                                    </p>
+                                </div>
+                                <div className="flex flex-col space-y-2">
+                                    {gridRows.map((row, rowIndex) => (
+                                        <div key={rowIndex} className="flex justify-between items-start gap-1 relative min-h-[80px]">
+                                            {row.map((item, colIndex) => {
+                                                // Escalonado reducido para compactar
+                                                const marginTop = colIndex === 0 ? 'mt-0' : colIndex === 1 ? 'mt-4' : 'mt-8';
+                                                const isPole = item.qualifying_position === 1;
 
-            {/* TABLA DE CLASIFICACIÓN */}
-            {selectedSessionId && (
-                loadingClassification ? (
-                    <div className="text-center py-12">
-                         <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-red-500 mx-auto"></div>
-                         <p className="mt-4 text-gray-400">Cargando resultados...</p>
-                    </div>
-                ) : classification.length > 0 ? (
-                    <div className="overflow-x-auto rounded-lg border border-gray-700">
-                        <table className="w-full text-sm text-left text-gray-300">
-                            <thead className="text-xs text-red-400 uppercase bg-gray-900/90">
-                                <tr>
-                                    <th className="px-4 py-3 text-center">Pos</th>
-                                    <th className="px-4 py-3">Piloto</th>
-                                    <th className="px-4 py-3 hidden sm:table-cell">Equipo</th>
-                                    <th className="px-4 py-3 hidden md:table-cell">Moto</th>
-                                    {isRaceSession ? (
-                                        <>
-                                            <th className="px-4 py-3 text-right">Tiempo/Dif</th>
-                                            <th className="px-4 py-3 text-center">Pts</th>
-                                        </>
+                                                // Intentar cruzar datos con allRiders para obtener equipo, color y dorsal
+                                                const details = allRiders.find(r => r.legacy_id === item.rider.legacy_id) || 
+                                                                allRiders.find(r => {
+                                                                    // Fallback por nombre si no hay legacy_id en GridItem
+                                                                    const itemName = item.rider.full_name.toLowerCase().replace(/\s/g, '');
+                                                                    const riderName = (r.name + r.surname).toLowerCase().replace(/\s/g, '');
+                                                                    return itemName.includes(riderName) || riderName.includes(itemName);
+                                                                });
+
+                                                const currentStep = details?.current_career_step;
+                                                const constructor = currentStep?.team?.constructor?.name;
+                                                const number = currentStep?.number; // Dorsal
+                                                const teamColor = currentStep?.team?.color || '#4B5563';
+
+                                                // Formateo de nombre específico
+                                                const nameParts = item.rider.full_name.split(' ');
+                                                // Asumimos formato simple "Nombre Apellido" o "Nombre Apellido Apellido"
+                                                // La API suele devolver "Pecco Bagnaia", "Marc Marquez", etc.
+                                                let fName = nameParts[0];
+                                                let lName = nameParts.slice(1).join(' ');
+                                                // Si el nombre tiene 3 partes y la primera es compuesta, ajustar logica si necesario, 
+                                                // pero para simplificar tomamos primera palabra como nombre y resto apellido.
+                                                
+                                                const displayName = formatGridName(fName, lName);
+                                                
+                                                return (
+                                                    <div 
+                                                        key={item.rider.id} 
+                                                        className={`w-[32%] ${marginTop} bg-gray-800 rounded-lg p-2 border border-gray-700 shadow-lg flex flex-col justify-between relative overflow-hidden h-24`}
+                                                    >
+                                                        {/* Número de Posición de Fondo Superpuesto */}
+                                                        <div className="absolute -bottom-4 -right-2 text-6xl font-black font-orbitron text-gray-700 opacity-20 z-0 pointer-events-none select-none">
+                                                            {item.qualifying_position}
+                                                        </div>
+                                                        
+                                                        {/* Contenido */}
+                                                        <div className="z-10 w-full relative">
+                                                            <div className="flex justify-between items-start">
+                                                                 <span className="font-mono text-[10px] text-red-400 leading-none">{item.qualifying_time}</span>
+                                                                 {isPole && <span className="bg-yellow-500 text-black text-[8px] font-bold px-1 rounded uppercase">POLE</span>}
+                                                            </div>
+                                                            
+                                                            <div className="mt-2">
+                                                                 <p className="text-white font-bold text-sm leading-tight truncate">{displayName}</p>
+                                                                 <div className="flex items-center gap-1 mt-1">
+                                                                    {/* Barra de color equipo */}
+                                                                    <div className="w-1 h-3 rounded-sm" style={{ backgroundColor: teamColor }}></div>
+                                                                    <span className="text-[9px] text-gray-400 uppercase truncate">
+                                                                        {constructor || 'MotoGP'} {number ? `#${number}` : ''}
+                                                                    </span>
+                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="flex items-center gap-1 mt-auto z-10 opacity-60">
+                                                            <span className="text-[9px] text-gray-500">{item.rider.country.iso}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {/* Rellenar huecos */}
+                                            {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
+                                                <div key={`empty-${i}`} className="w-[32%]"></div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div className="mt-8 flex justify-end">
+                                <button
+                                    onClick={handleCaptureGridScreenshot}
+                                    disabled={isCapturingGrid}
+                                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                    aria-label={isCapturingGrid ? "Capturando..." : "Capturar y compartir parrilla"}
+                                >
+                                    {isCapturingGrid ? (
+                                        <RefreshIcon className="w-5 h-5 animate-spin mr-2" />
                                     ) : (
-                                        <>
-                                            <th className="px-4 py-3 text-right">Tiempo</th>
-                                            <th className="px-4 py-3 text-right hidden sm:table-cell">Dif 1º</th>
-                                            <th className="px-4 py-3 text-right hidden md:table-cell">Dif Ant</th>
-                                        </>
+                                        <CameraIcon className="w-5 h-5 mr-2" />
                                     )}
-                                </tr>
-                            </thead>
-                            <tbody className="bg-gray-800/30">
-                                {classification.map((item, index) => {
-                                    const posClass = item.position === 1 ? 'bg-yellow-500 text-black' : 
-                                                     item.position === 2 ? 'bg-gray-300 text-black' : 
-                                                     item.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-gray-300';
-
-                                    // Lógica para construir la información de Equipo / Constructor de forma segura
-                                    const teamName = item.team?.name;
-                                    const constructorName = item.constructor?.name;
-                                    
-                                    let teamInfo = '';
-                                    if (teamName && constructorName) {
-                                        teamInfo = `${teamName} / ${constructorName}`;
-                                    } else if (teamName) {
-                                        teamInfo = teamName;
-                                    } else if (constructorName) {
-                                        teamInfo = constructorName;
-                                    } else {
-                                        teamInfo = '';
-                                    }
-                                    
-                                    return (
-                                        <tr key={item.id} className="border-b border-gray-700 hover:bg-gray-700/40 transition-colors">
-                                            <td className="px-4 py-3 text-center">
-                                                {item.position ? (
-                                                    <span className={`w-6 h-6 inline-flex items-center justify-center font-bold rounded text-xs ${posClass}`}>
-                                                        {item.position}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-gray-500">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex flex-col items-center min-w-[24px]">
-                                                         <span className="text-xs text-gray-400 font-mono">{item.rider.number ? `#${item.rider.number}` : ''}</span>
-                                                         {/* Bandera simplificada con texto si no hay imagen disponible */}
-                                                         <span className="text-[10px] text-gray-500">{item.rider.country.iso}</span>
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-white text-base">{item.rider.full_name}</span>
-                                                        {/* Nuevo subtexto Team/Constructor */}
-                                                        <span className="text-xs text-gray-400">{teamInfo}</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 hidden sm:table-cell text-gray-400">{item.team?.name || '-'}</td>
-                                            <td className="px-4 py-3 hidden md:table-cell text-gray-400">{item.constructor?.name || '-'}</td>
-                                            
-                                            {isRaceSession ? (
-                                                <>
-                                                    <td className="px-4 py-3 text-right font-mono text-white">
-                                                        {index === 0 ? item.time : item.gap?.first ? `+${item.gap.first}` : item.status}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-bold text-white">
-                                                        {item.points || 0}
-                                                    </td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="px-4 py-3 text-right font-mono text-white font-bold">
-                                                        {item.best_lap?.time}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-mono text-gray-400 hidden sm:table-cell">
-                                                        {item.gap?.first === '0.000' ? '-' : (item.gap?.first ? `+${item.gap.first}` : '')}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-mono text-gray-400 hidden md:table-cell">
-                                                        {item.gap?.prev === '0.000' ? '-' : (item.gap?.prev ? `+${item.gap.prev}` : '')}
-                                                    </td>
-                                                </>
-                                            )}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                                    <span>{isCapturingGrid ? 'Capturando...' : 'Compartir Parrilla'}</span>
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700 border-dashed">
+                            <p className="text-gray-400">No hay datos de parrilla disponibles.</p>
+                        </div>
+                    )
                 ) : (
-                    <div className="text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700 border-dashed">
-                        <p className="text-gray-400">No hay datos de clasificación disponibles para esta sesión.</p>
-                    </div>
+                    // --- TABLA DE CLASIFICACIÓN ESTÁNDAR ---
+                    classification.length > 0 ? (
+                        <div className="overflow-x-auto rounded-lg border border-gray-700">
+                            <table className="w-full text-sm text-left text-gray-300">
+                                <thead className="text-xs text-red-400 uppercase bg-gray-900/90">
+                                    <tr>
+                                        <th className="px-4 py-3 text-center">Pos</th>
+                                        <th className="px-4 py-3">Piloto</th>
+                                        <th className="px-4 py-3 hidden sm:table-cell">Equipo</th>
+                                        <th className="px-4 py-3 hidden md:table-cell">Moto</th>
+                                        {isRaceSession ? (
+                                            <>
+                                                <th className="px-4 py-3 text-right">Tiempo/Dif</th>
+                                                <th className="px-4 py-3 text-center">Pts</th>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <th className="px-4 py-3 text-right">Tiempo</th>
+                                                <th className="px-4 py-3 text-right hidden sm:table-cell">Dif 1º</th>
+                                                <th className="px-4 py-3 text-right hidden md:table-cell">Dif Ant</th>
+                                            </>
+                                        )}
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-gray-800/30">
+                                    {classification.map((item, index) => {
+                                        const posClass = item.position === 1 ? 'bg-yellow-500 text-black' : 
+                                                         item.position === 2 ? 'bg-gray-300 text-black' : 
+                                                         item.position === 3 ? 'bg-yellow-700 text-white' : 'bg-gray-700 text-gray-300';
+
+                                        // Lógica para construir la información de Equipo / Constructor de forma segura
+                                        const teamName = item.team?.name;
+                                        const constructorName = item.constructor?.name;
+                                        
+                                        let teamInfo = '';
+                                        if (teamName && constructorName) {
+                                            teamInfo = `${teamName} / ${constructorName}`;
+                                        } else if (teamName) {
+                                            teamInfo = teamName;
+                                        } else if (constructorName) {
+                                            teamInfo = constructorName;
+                                        } else {
+                                            teamInfo = '';
+                                        }
+                                        
+                                        return (
+                                            <tr key={item.id} className="border-b border-gray-700 hover:bg-gray-700/40 transition-colors">
+                                                <td className="px-4 py-3 text-center">
+                                                    {item.position ? (
+                                                        <span className={`w-6 h-6 inline-flex items-center justify-center font-bold rounded text-xs ${posClass}`}>
+                                                            {item.position}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-500">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex flex-col items-center min-w-[24px]">
+                                                             <span className="text-xs text-gray-400 font-mono">{item.rider.number ? `#${item.rider.number}` : ''}</span>
+                                                             {/* Bandera simplificada con texto si no hay imagen disponible */}
+                                                             <span className="text-[10px] text-gray-500">{item.rider.country.iso}</span>
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-white text-base">{item.rider.full_name}</span>
+                                                            {/* Nuevo subtexto Team/Constructor */}
+                                                            <span className="text-xs text-gray-400">{teamInfo}</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 hidden sm:table-cell text-gray-400">{item.team?.name || '-'}</td>
+                                                <td className="px-4 py-3 hidden md:table-cell text-gray-400">{item.constructor?.name || '-'}</td>
+                                                
+                                                {isRaceSession ? (
+                                                    <>
+                                                        <td className="px-4 py-3 text-right font-mono text-white">
+                                                            {index === 0 ? item.time : item.gap?.first ? `+${item.gap.first}` : item.status}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center font-bold text-white">
+                                                            {item.points || 0}
+                                                        </td>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <td className="px-4 py-3 text-right font-mono text-white font-bold">
+                                                            {item.best_lap?.time}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-mono text-gray-400 hidden sm:table-cell">
+                                                            {item.gap?.first === '0.000' ? '-' : (item.gap?.first ? `+${item.gap.first}` : '')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-mono text-gray-400 hidden md:table-cell">
+                                                            {item.gap?.prev === '0.000' ? '-' : (item.gap?.prev ? `+${item.gap.prev}` : '')}
+                                                        </td>
+                                                    </>
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 bg-gray-800/30 rounded-lg border border-gray-700 border-dashed">
+                            <p className="text-gray-400">No hay datos de clasificación disponibles para esta sesión.</p>
+                        </div>
+                    )
                 )
+            )}
+            
+            {gridScreenshot && (
+                <ScreenshotModal 
+                    imageDataUrl={gridScreenshot}
+                    onClose={() => setGridScreenshot(null)}
+                />
             )}
         </div>
     );
@@ -3497,7 +3712,7 @@ function MotoGpDataTab({ data }: { data: MotoGpData | null }) {
     );
 }
 
-export function App() {
+export default function App() {
     const [motoGpData, setMotoGpData] = useState<MotoGpData | null>(null);
     const [rawCsv, setRawCsv] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);

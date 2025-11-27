@@ -159,7 +159,7 @@ export interface ApiEventResult {
 // Sesiones para la API de Resultados (Results API)
 export interface ApiSessionResult {
     id: string;
-    type: string; // 'FP', 'Q', 'RAC', 'SPR', 'WUP', 'PR'
+    type: string; // 'FP', 'Q', 'RAC', 'SPR', 'WUP', 'PR', 'GRID'
     number: number | null;
     status: string; // 'FINISHED'
     date: string;
@@ -215,6 +215,22 @@ export interface ApiClassificationItem {
 export interface ApiClassificationResponse {
     classification: ApiClassificationItem[];
     file?: string;
+}
+
+// Tipos para el Grid (Parrilla)
+export interface ApiGridItem {
+    qualifying_position: number;
+    qualifying_time: string;
+    rider: {
+        id: string;
+        full_name: string;
+        legacy_id: number;
+        country: {
+            iso: string;
+            name: string;
+        };
+    };
+    // Otros campos pueden venir, pero estos son los esenciales
 }
 
 // Tipos Legacy para compatibilidad con otras partes
@@ -435,3 +451,5 @@ export interface RiderSeasonStat {
     points: number;
     position: number;
 }
+
+export type MotoGpDataView = 'menu' | 'results' | 'riders' | 'profile' | 'circuits' | 'circuit_detail';
