@@ -31,6 +31,8 @@ export interface PlayerScore {
   player: string;
   totalPoints: number;
   pointsPerRace: number[];
+  sprintPointsPerRace: number[];
+  racePointsPerRace: number[];
 }
 
 export interface PlayerVote {

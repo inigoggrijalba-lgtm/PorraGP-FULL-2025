@@ -81,19 +81,43 @@ const parseCsvData = (csvText: string): MotoGpData => {
         time: raceTimes[i]?.trim() || 'TBC',
     })).filter(r => r.circuit);
 
+    // --- Puntos Sprint (Rows 95-107 => Index 94-106) ---
+    const sprintPointsMap = new Map<string, number[]>();
+    for (let i = 94; i < 107; i++) {
+        if (!dataGrid[i] || !dataGrid[i][0]) continue;
+        const row = dataGrid[i];
+        const player = row[0].trim();
+        const points = row.slice(2, 24).map(p => parseFloat(p) || 0);
+        sprintPointsMap.set(player, points);
+    }
+
+    // --- Puntos Race (Rows 109-121 => Index 108-120) ---
+    const racePointsMap = new Map<string, number[]>();
+    for (let i = 108; i < 121; i++) {
+        if (!dataGrid[i] || !dataGrid[i][0]) continue;
+        const row = dataGrid[i];
+        const player = row[0].trim();
+        const points = row.slice(2, 24).map(p => parseFloat(p) || 0);
+        racePointsMap.set(player, points);
+    }
+
     // --- Clasificación ---
     const standings: PlayerScore[] = [];
     for (let i = 3; i < 16; i++) {
         if (!dataGrid[i] || !dataGrid[i][0]) continue;
         const row = dataGrid[i];
+        const player = row[0].trim();
         const pointsPerRace = row.slice(2, 24).map(p => parseFloat(p) || 0);
         // Se calcula el total de puntos sumando los puntos de cada carrera,
         // ignorando el total precalculado en la hoja de cálculo.
         const totalPoints = pointsPerRace.reduce((sum, current) => sum + current, 0);
+        
         standings.push({
-            player: row[0].trim(),
+            player: player,
             totalPoints: totalPoints,
             pointsPerRace: pointsPerRace,
+            sprintPointsPerRace: sprintPointsMap.get(player) || Array(pointsPerRace.length).fill(0),
+            racePointsPerRace: racePointsMap.get(player) || Array(pointsPerRace.length).fill(0),
         });
     }
     standings.sort((a, b) => b.totalPoints - a.totalPoints);
@@ -323,23 +347,34 @@ function StatCard({ title, value, metric, icon }: { title: string, value: string
 interface PlayerVoteCardProps {
     player: string;
     vote: string;
+    imageUrl?: string;
     onClick: () => void;
 }
 
-const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({ player, vote, onClick }) => {
+const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({ player, vote, imageUrl, onClick }) => {
     const riderColor = getRiderColor(vote);
     return (
         <div 
             onClick={onClick}
-            className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 flex items-center justify-between hover:bg-gray-800 cursor-pointer transition-colors group"
+            className="bg-gray-900/50 rounded-lg border border-gray-700 flex items-center justify-between hover:bg-gray-800 cursor-pointer transition-colors group overflow-hidden h-28 relative"
         >
-            <div className="flex items-center gap-3">
-                <div className="w-2 h-10 rounded-full" style={{ backgroundColor: riderColor }}></div>
+            <div className="flex items-center gap-3 pl-4 py-2 z-10">
+                <div className="w-1.5 h-12 rounded-full" style={{ backgroundColor: riderColor }}></div>
                 <div>
-                    <p className="font-bold text-white group-hover:text-red-400 transition-colors">{player}</p>
+                    <p className="font-bold text-white group-hover:text-red-400 transition-colors text-lg">{player}</p>
                     <p className="text-sm text-gray-400">Voto: <span className="text-white font-medium">{vote}</span></p>
                 </div>
             </div>
+            {imageUrl && (
+                <div className="h-full aspect-square flex-shrink-0">
+                    <img 
+                        src={imageUrl} 
+                        alt={vote} 
+                        className="w-full h-full object-cover object-top scale-125 origin-top transition-transform duration-500 group-hover:scale-135" 
+                        loading="lazy" 
+                    />
+                </div>
+            )}
         </div>
     );
 }
@@ -727,6 +762,19 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
     const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
     const [installModalOS, setInstallModalOS] = useState<'android' | 'ios' | null>(null);
     const [nextApiEvent, setNextApiEvent] = useState<ApiBroadcastEvent | null>(null);
+    const [riders, setRiders] = useState<ApiRider[]>([]);
+
+    useEffect(() => {
+        const loadRiders = async () => {
+            try {
+                const allRiders = await fetchAllRiders();
+                setRiders(allRiders);
+            } catch (e) {
+                console.error("Failed to load riders for dashboard images", e);
+            }
+        };
+        loadRiders();
+    }, []);
 
     const leader = data.standings && data.standings.length > 0 ? data.standings[0] : undefined;
     const mostVotedDriver = data.driverVoteCounts && data.driverVoteCounts.length > 0 ? data.driverVoteCounts[0] : undefined;
@@ -776,7 +824,17 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
         return data.playerVotes.map(playerVote => ({
             player: playerVote.player,
             vote: playerVote.votesPerRace[nextRaceIndex] || '-',
-        })).sort((a, b) => a.player.localeCompare(b.player));
+        })).sort((a, b) => {
+            const hasVotedA = a.vote && a.vote !== '-' && a.vote !== 'N/A' && a.vote.trim() !== '';
+            const hasVotedB = b.vote && b.vote !== '-' && b.vote !== 'N/A' && b.vote.trim() !== '';
+
+            // 1. Prioridad: Los que han votado primero
+            if (hasVotedA && !hasVotedB) return -1;
+            if (!hasVotedA && hasVotedB) return 1;
+
+            // 2. Prioridad: Alfabético por nombre de jugador
+            return a.player.localeCompare(b.player);
+        });
     }, [data, nextRaceInfo.race]);
 
     const getNextRaceTimeInfo = () => {
@@ -804,6 +862,35 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
     const nextRaceName = nextApiEvent 
         ? (nextApiEvent.additional_name || nextApiEvent.name)
         : (nextRaceInfo.seasonOver ? 'TEMPORADA FINALIZADA' : (nextRaceInfo.race?.circuit ?? 'N/A'));
+
+    const getRiderImage = useCallback((voteName: string) => {
+        if (!riders.length || !voteName || voteName === '-' || voteName === 'N/A') return undefined;
+        
+        // Normalize vote: remove dots, spaces, accents, lowercase
+        const normVote = voteName.toLowerCase().replace(/[.\s]/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        
+        const found = riders.find(r => {
+            const rName = r.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s/g, '');
+            const rSurname = r.surname.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s/g, '');
+            
+            // Check exact surname match
+            if (normVote === rSurname) return true;
+            
+            // Check initial + surname (e.g. mmarquez)
+            if (normVote === (rName[0] + rSurname)) return true;
+
+            // Check full name match just in case
+            if (normVote === (rName + rSurname)) return true;
+            
+            return false;
+        });
+
+        if (!found) return undefined;
+
+        // Prefer portrait (headshot) over profile
+        const career = found.current_career_step;
+        return career?.pictures?.portrait || career?.pictures?.profile?.main || undefined;
+    }, [riders]);
 
     return (
         <>
@@ -840,6 +927,7 @@ function DashboardTab({ data, setActiveTab }: { data: MotoGpData, setActiveTab: 
                                 key={player}
                                 player={player}
                                 vote={vote}
+                                imageUrl={getRiderImage(vote)}
                                 onClick={() => setSelectedPlayer(player)}
                             />
                         ))}
@@ -954,7 +1042,11 @@ function StandingsTab({ data }: { data: MotoGpData }) {
                                 {data.standings.map((player, index) => {
                                     const diffFromLeader = leaderPoints - player.totalPoints;
                                     const diffFromNext = index > 0 ? (data.standings[index - 1].totalPoints - player.totalPoints) : 0;
-                                    const lastRacePoints = currentRaceNumber > 0 ? player.pointsPerRace[currentRaceNumber - 1] || 0 : 0;
+                                    
+                                    const lastRaceIndex = currentRaceNumber > 0 ? currentRaceNumber - 1 : -1;
+                                    const lastRacePoints = lastRaceIndex >= 0 ? player.pointsPerRace[lastRaceIndex] || 0 : 0;
+                                    const lastSprintPoints = lastRaceIndex >= 0 ? player.sprintPointsPerRace[lastRaceIndex] || 0 : 0;
+                                    const lastRaceMainPoints = lastRaceIndex >= 0 ? player.racePointsPerRace[lastRaceIndex] || 0 : 0;
 
                                     return (
                                         <tr key={player.player} className="border-b border-gray-700 hover:bg-gray-800/50">
@@ -967,7 +1059,12 @@ function StandingsTab({ data }: { data: MotoGpData }) {
                                             <td className="px-2 py-4 text-center motogp-red font-orbitron">{player.totalPoints}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromLeader}`}</td>
                                             <td className="px-2 py-4 text-center text-gray-400">{index === 0 ? '-' : `-${diffFromNext}`}</td>
-                                            <td className="px-2 py-4 text-center">{lastRacePoints}</td>
+                                            <td className="px-2 py-4 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <span className="font-bold">{lastRacePoints}</span>
+                                                    <span className="text-[10px] text-gray-400 whitespace-nowrap">S:{lastSprintPoints} / R:{lastRaceMainPoints}</span>
+                                                </div>
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -1064,6 +1161,8 @@ function CircuitsTab({ data }: { data: MotoGpData }) {
         return data.standings.map(player => ({
             player: player.player,
             points: player.pointsPerRace[raceIndex] || 0,
+            sprintPoints: player.sprintPointsPerRace[raceIndex] || 0,
+            racePoints: player.racePointsPerRace[raceIndex] || 0,
             vote: data.playerVotes.find(v => v.player === player.player)?.votesPerRace[raceIndex] || 'N/A'
         })).sort((a,b) => b.points - a.points);
     }
@@ -1117,7 +1216,12 @@ function CircuitsTab({ data }: { data: MotoGpData }) {
                             {raceData.map(res => (
                                 <tr key={res.player} className="border-b border-gray-700 hover:bg-gray-800/50">
                                     <td className="px-6 py-4 font-bold text-white">{res.player}</td>
-                                    <td className="px-6 py-4 text-center font-orbitron">{res.points}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex flex-col items-center">
+                                            <span className="font-orbitron font-bold text-base">{res.points}</span>
+                                            <span className="text-[10px] text-gray-400 whitespace-nowrap">SPR: {res.sprintPoints} / RACE: {res.racePoints}</span>
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4">{res.vote}</td>
                                 </tr>
                             ))}
